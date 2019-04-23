@@ -27,14 +27,14 @@ library(tidyverse)
 ```{r load in data}
 #Set your current working directory (where all your files are)
 #setwd("~/Desktop/WGCNA/") # Change the text within quotes as necessary. I have downloaded and unzipped the WGCNA folder on my Desktop
-setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq")
-source("outersect.R")
+
+source("code/outersect.R")
 #setwd("D:/Dropbox/Projects/BPO_rnaseq")
 
 # Uploading data into R and formatting it for WGCNA --------------
 
 # This creates an object called "bpo.Expr" that contains the normalized counts file output from DESeq2
-bpo.Expr <-read.table(file="varianceStabilized_counts.txt",header = T)
+bpo.Expr <-read.table(file="data/varianceStabilized_counts.txt",header = T)
 # "head" the file to preview it
 head(bpo.Expr,10) # You see that genes are listed in a column named "X" and samples are in columns
 
@@ -47,13 +47,13 @@ dim(bpo.Expr) # 18 samples and 11000 genes
 #Create an object called "bpoTraits" that contains your trait data
 ##use Traits_WGCNAv2.csv for combined pheromone column
 ###use Traits_WGCNA.csv for each pheromone in seperate column
-bpoTraits <- read.csv("Traits_WGCNA_HAv.csv",header = T,row.names = 1)
+bpoTraits <- read.csv("data/Traits_WGCNA_HAv.csv",header = T,row.names = 1)
 head(bpoTraits)
 
 all(row.names(bpo.Expr)==row.names(bpoTraits))
 
 
-vsd <- read.csv("GeneIDtoGeneName.csv", header = TRUE, row.names = 1)
+vsd <- read.csv("data/GeneIDtoGeneName.csv", header = TRUE, row.names = 1)
 
 
 #form a data frame analogous to expression data that will hold the clinical traits.
@@ -63,14 +63,14 @@ table(rownames(bpoTraits) == rownames(bpo.Expr)) #should return TRUE if datasets
 # You have finished uploading and formatting expression and trait data
 # Expression data is in bpo.Expr, corresponding traits are bpoTraits
 
- save(bpo.Expr, bpoTraits, file = "SamplesAndTraits_bpo.RData")
+ save(bpo.Expr, bpoTraits, file = "data/SamplesAndTraits_bpo.RData")
 # load("SamplesAndTraits_bpo.RData")
 
 
 ```
 
 ```{r cluster by expression}
-load("SamplesAndTraits_bpo.RData")
+load("data/SamplesAndTraits_bpo.RData")
 
 
 # Cluster samples by expression ----------------------------------------------------------------
@@ -98,7 +98,7 @@ plotDendroAndColors(
 remove.samples = Z.k<thresholdZ.k | is.na(Z.k)
 bpo.ExprOut = bpo.Expr[!remove.samples,]
 bpoTraitsOut = bpoTraits[!remove.samples,]
-save(bpo.ExprOut, bpoTraitsOut, file="SamplesAndTraits_bpo_OutliersRemoved.RData")
+save(bpo.ExprOut, bpoTraitsOut, file="data/SamplesAndTraits_bpo_OutliersRemoved.RData")
 
 
 ```
@@ -107,7 +107,7 @@ save(bpo.ExprOut, bpoTraitsOut, file="SamplesAndTraits_bpo_OutliersRemoved.RData
 
 
 
-load("SamplesAndTraits_bpo_OutliersRemoved.RData")
+load("data/SamplesAndTraits_bpo_OutliersRemoved.RData")
 # Choose a soft threshold power- USE A SUPERCOMPUTER IRL ------------------------------------
 powers = c(c(1:10), seq(from = 10, to = 30, by = 2)) #choosing a set of soft-thresholding powers
 sft = pickSoftThreshold(
@@ -208,7 +208,7 @@ Mod_numbers_colors<-cbind(dynamicColors, dynamicMods)%>%unique()
 
 save(dynamicMods,Mod_numbers_colors, MEList, MEs, MEDiss, METree,geneTree,adjacency, file = "Network_allSamples_signed_RLDfiltered.RData")
 
-save(TOM,file="Tom_BPO.RData")
+save(TOM,file="data/Tom_BPO.RData")
 ```
 
 
