@@ -206,7 +206,7 @@ MEDiss = 1 - cor(MEs)
 METree = flashClust(as.dist(MEDiss), method = "average")
 Mod_numbers_colors<-cbind(dynamicColors, dynamicMods)%>%unique()
 
-save(dynamicMods,Mod_numbers_colors, MEList, MEs, MEDiss, METree,geneTree,adjacency, file = "Network_allSamples_signed_RLDfiltered.RData")
+save(dynamicMods,Mod_numbers_colors, MEList, MEs, MEDiss, METree,geneTree,adjacency, file = "data/Network_allSamples_signed_RLDfiltered.RData")
 
 save(TOM,file="data/Tom_BPO.RData")
 ```
@@ -255,7 +255,7 @@ colorOrder = c("grey", standardColors(50))
 moduleLabels = match(moduleColors, colorOrder) - 1
 MEs = mergedMEs
 
-save(MEs, moduleLabels, moduleColors, geneTree, file = "Network_allSamples_signed_nomerge_RLDfiltered.RData")
+save(MEs, moduleLabels, moduleColors, geneTree, file = "data/Network_allSamples_signed_nomerge_RLDfiltered.RData")
 
 
 
@@ -266,12 +266,12 @@ save(MEs, moduleLabels, moduleColors, geneTree, file = "Network_allSamples_signe
 ```{r glm}
 ##number genes in each module
 #load("Network_allSamples_signed_RLDfiltered.RData")
-load("Network_allSamples_signed_nomerge_RLDfiltered.RData")
+load("data/Network_allSamples_signed_nomerge_RLDfiltered.RData")
 #load("SamplesAndTraits_bpo.RData")
 
 
 
-bp_info<-read.csv(file="Bpo_info.csv", row.names=1, header=T)
+bp_info<-read.csv(file="data/Bpo_info.csv", row.names=1, header=T)
 bp_info<-bp_info[rownames(bpoTraits),]
 bp_info$PheroXFood<- factor(paste0(bp_info$Pheromone, bp_info$Food), levels=c("ControlNectar", "ControlPollen","BPNectar", "BPPollen", "EBONectar", "EBOPollen"))
 
@@ -307,7 +307,7 @@ pvalues<-cbind(pvalues,pmap_dfr(pvalues,~data.frame(min=min(..1,..2,..3))))
 pval_Sig_Modules_GLM<-pvalues[pvalues$min<0.05,]%>%select(-min)
 Cor_Sig_Modules_GLM<-res[pvalues$min<0.05,]
 
-save(Cor_Sig_Modules_GLM,pval_Sig_Modules_GLM, file = "GLM_pval_Cor.RData")
+save(Cor_Sig_Modules_GLM,pval_Sig_Modules_GLM, file = "data/GLM_pval_Cor.RData")
 
 
 
@@ -315,8 +315,8 @@ save(Cor_Sig_Modules_GLM,pval_Sig_Modules_GLM, file = "GLM_pval_Cor.RData")
 
 
 ```{r extracting significant genes}
-load("GLM_pval_Cor.RData")
-source("outersect.R")
+load("data/GLM_pval_Cor.RData")
+source("code/outersect.R")
 Pollen_ME<-pval_Sig_Modules_GLM[pval_Sig_Modules_GLM$Pollen<0.05,]%>%rownames()
 
 BP_ME<-pval_Sig_Modules_GLM[pval_Sig_Modules_GLM$BP<0.05,]%>%rownames()
@@ -369,11 +369,8 @@ moduleList<-gsub("ME","" ,Significant_ME)
 
 
 ```{r module gene lists for DAVID }
-load("Network_allSamples_signed_nomerge_RLDfiltered.RData")
+load("data/Network_allSamples_signed_nomerge_RLDfiltered.RData")
 #Significant_ME
-
-setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq") 
-
 
 ###This loop creats one single file that has all the genes for each module
 module_significant_genes<-data.frame(background=row.names(t(bpo.Expr)))
@@ -395,15 +392,15 @@ colnames(module_significant_genes)<-c("background",moduleList)
 # length(lists)<-length(module_significant_genes$background)
 # module_significant_genes<-cbind(module_significant_genes)
 
-write.table(module_significant_genes,file="WGCNA_all_sig_module_genes.txt",row.names=F,quote=F,sep = "\t")##use excel to remove all NA values before uploading to david
+write.table(module_significant_genes,file="output/WGCNA_all_sig_module_genes.txt",row.names=F,quote=F,sep = "\t")##use excel to remove all NA values before uploading to david
 
-save(module_significant_genes,file="module_sig_genes.RData")
+save(module_significant_genes,file="data/module_sig_genes.RData")
 ```
 
 
 
 ```{r hub genes}
-source("get_hubs.R")
+source("code/get_hubs.R")
 #load("Network_allSamples_signed_RLDfiltered.RData")
 #adj1 in the vignette is what is adjacency
 #adjacency[1:5,1:5]
@@ -415,7 +412,7 @@ colnames(mColors.df)<-c("module","size")##expression data in place of dat.Expr
 
 #bpo.Expr[1:5,1:5]
 
-conversion<-read.csv(file = "mRNA_Entrez_Beebase_conversion.csv")
+conversion<-read.csv(file = "data/mRNA_Entrez_Beebase_conversion.csv")
 conversion<-conversion[,c("GeneID","BeeBase")]
 colnames(conversion)<-c("hub_gene", "BeeBase")
 conversion$hub_gene<-as.character(conversion$hub_gene)
@@ -469,8 +466,8 @@ write.csv(hub_genes_beebase, file="output/top5_hub_genes_beebase.csv")
 ```
 
 ```{r overlaps b/w DEG and module genes}
-load("module_sig_genes.RData")
-load("deg_summary_all_lists.RData")
+load("data/module_sig_genes.RData")
+load("data/deg_summary_all_lists.RData")
 all_DEG_overlap<-listnames<-c()
 for (i in 1:length(colnames(module_significant_genes))){
 name<-paste(colnames(module_significant_genes)[i],"_DEGintersect",sep="")  
@@ -481,22 +478,22 @@ name<-paste(colnames(module_significant_genes)[i],"_DEGintersect",sep="")
   colnames(all_DEG_overlap)<-listnames
 }
 
-hub_genes_beebase<-read.csv( file="top5_hub_genes_beebase.csv", header = T)
-module_hub_category<-read.csv(file = "module_hub_category.csv", header = T)
+hub_genes_beebase<-read.csv( file="output/top5_hub_genes_beebase.csv", header = T)
+module_hub_category<-read.csv(file = "output/module_hub_category.csv", header = T)
 
 intersect(hub_genes_beebase$hub_gene, DEG_summary_all_lists$allDEG)
 hub_DEG<-intersect(module_hub_category$hub_gene,DEG_summary_all_lists$allDEG)
-module_hub_category[c(module_hub_category$hub_gene)==hub_DEG,]
+module_hub_category[ as.character(module_hub_category$hub_gene)%in%hub_DEG,]
 ```
 
 ```{r kegg for modules}
-load("module_sig_genes.RData")
+load("data/module_sig_genes.RData")
 attach(module_significant_genes)#want to be able to refer to data using column names, espcially background
 
-vst<-read.table(file="varianceStabilized_counts.txt",header = T)#could use this for visualizing
+vst<-read.table(file="data/varianceStabilized_counts.txt",header = T)#could use this for visualizing
 
 #lightgreen and darkgreen don't have significant keggs
-interesting_genes<-c(purple)
+interesting_genes<-c()##was module purple, but use numbers now
 
 
 xyz<-find_enriched_pathway(purple,species='ame')
@@ -517,7 +514,7 @@ for(i in 1:dim(module_significant_genes)[2]){
 }
 kegg_pathways_WGCNA<-kegg_pathways_WGCNA%>%as.data.frame()
 colnames(kegg_pathways_WGCNA)<-colnames(module_significant_genes)
-write.csv(kegg_pathways_WGCNA,file = "kegg_pathways_WGCNA.csv")
+write.csv(kegg_pathways_WGCNA,file = "output/kegg_pathways_WGCNA.csv")
 ```
 
 
@@ -525,7 +522,7 @@ write.csv(kegg_pathways_WGCNA,file = "kegg_pathways_WGCNA.csv")
 library(viridis)
 library(pheatmap)
 
-load("Network_allSamples_signed_RLDfiltered.RData")
+load("data/Network_allSamples_signed_RLDfiltered.RData")
 
 pal<- brewer.pal(11,"RdBu") #or "BrBG"
 
@@ -592,7 +589,7 @@ pheatmap(
   number_color = "black",
   number_format = "%.f2",
   na_col = "#FFFFFF",
-  filename = "WGNCA_All_Sig_Module_Trait_Relationship_GLM.pdf")
+  filename = "figures/WGNCA_All_Sig_Module_Trait_Relationship_GLM.pdf")
   
 
     
@@ -600,8 +597,9 @@ pheatmap(
 
 ```{r visualize network}
 library(WGCNA)
-load("SamplesAndTraits_bpo.RData")
-load("Network_all_signed_nomerge_RLDfiltered.RData")
+library(viridis)
+load("data/SamplesAndTraits_bpo.RData")
+load("data/Network_all_signed_nomerge_RLDfiltered.RData")
 #dissTOM<-1-TOM
 #plotTOM<- dissTOM^7
 #TOMplot(plotTOM, geneTree, moduleColors, main = "Network heatmap plot, all genes") # don't run, breaks computer
@@ -616,7 +614,7 @@ plotEigengeneNetworks(MEs,colorLabels = T,plotHeatmaps = F, "Eigengene adjacency
 
 
 moduleList<-sub("ME","" ,Significant_ME)
-library(viridis)
+
 
 ##for significant modules, plot heatmap
 plotEigengeneNetworks(MEs_significant,colorLabels =  T,"Significant Module:  \n  Eigengene adjacency heatmap",plotDendrograms = F,signed = T,heatmapColors = inferno(100),plotAdjacency = F)
@@ -627,12 +625,12 @@ plotEigengeneNetworks(MEs_significant,colorLabels =  T,"Significant Module dendr
 
 ```{r exporting consensus to Cytoscape}
 # Recalculate topological overlap if needed
-load("ConsensusModules_BvsFBO.RData")
-Cons_name<-load("consensusTOM-block.1.RData")
+load("data/TOM_BPO.Rdata")
+Cons_name<-load("data/consensusTOM-block.1.RData")##where is this
 
 consTOM = TOM%>%as.matrix()
 # Read in the annotation file
-annot <-read.csv("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/Reference Sheets/mRNA_Entrez_Genbank_HAv3.1beebase_conversion.csv",header = T)
+annot <-read.csv("data/mRNA_Entrez_Genbank_HAv3.1beebase_conversion.csv",header = T)
 # Select modules
 modules =  "7";
 #goodgenes<-net$goodGenes
@@ -648,8 +646,8 @@ modTOM = consTOM[inModule, inModule];
 dimnames(modTOM) = list(modProbes, modProbes)
 # Export the network into edge and node list files Cytoscape can read
 cyt = exportNetworkToCytoscape(modTOM,
-edgeFile = paste("CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
-nodeFile = paste("CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+edgeFile = paste("Module_network_visualizations/CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
+nodeFile = paste("Module_network_visualizations/CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
 weighted = TRUE,
 threshold = 0.02,
 nodeNames = modProbes,
@@ -658,444 +656,3 @@ nodeAttr = moduleColors[inModule]);
 ```
 
 
-
-##Deprecated CODE##
-
-```{r generate module gene lists}
-
-
-#to figure out how many in modules
-# ##useful to use names(MEs)
-# whichModule="brown"
-# table(moduleColors)
-# table(moduleColors==whichModule)
-# genes=row.names(t(bpo.Expr))[moduleColors==whichModule]
-# fishers=data.frame("gene"=row.names(t(bpo.Expr)),"inModule"=as.numeric(row.names(t(bpo.Expr)) %in% genes))
-# table(fishers$inModule)
-
-
-
-##This loop creates csv files for each significant module
-
-moduleList<-gsub("ME","" ,Significant_ME)
-
- 
-setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq/WGCNA_Modules")
-
-
-for (i in moduleList){
-  whichModule= i
-  genes=row.names(t(bpo.Expr))[moduleColors==whichModule]
-  module_genes <- colnames(bpo.Expr) %in% genes
-  fishers=data.frame("gene"=row.names(t(bpo.Expr)),"inModule"= geneModulemember[, paste("kME", i, sep = "")])
-  fishers[,2][module_genes == FALSE] <- 0
-  #table(fishers$Bee_kME == 0)
-  #fishers$gene <- sub("ENSGACG", "isogroup", fishers$gene) ###ask brian what this line does
-  write.csv(fishers,file=paste(whichModule,"_kME.csv",sep=""),row.names=F,quote=F)
-}
-setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq") 
-
-```
-
-```{r loop trait-corr figs}
-
-#Print correlation heatmap between modules and traits
-MTC=cbind(Pheromone_ME,Food_Phero_ME, BP_unique_ME, EBO_unique_ME, Food_unique_ME)
-par(mar=c(1,1,1,1))
-par(mfrow = c(5,1))
-
-#pdf(file="figures/WGNCA_All_split.pdf",width = 8, height = 7)
-
-for (list in colnames(MTC)){
-  TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% MTC[,list],]
-rownames<-row.names(TraitCor)
-Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in%  MTC[,list],]
-filename<-gsub(" ","",paste("WGCNA_",list,".pdf"))
-#pdf(file=filename,width = 8, height = 7)
-
-
-
-textMatrix = paste(signif(TraitCor, 2),
-                   "\n(",
-                   signif(Pvalue, 1),
-                   ")",
-                   sep = "")
-if(is.null(dim(TraitCor))){
-  dim(TraitCor)=c(1,4)
-} else {
-  dim(TraitCor)=dim(TraitCor)
-}
-  
-  
-  
-dim(textMatrix) <- dim(TraitCor)
-
-
-#display the corelation values with a heatmap plot
-
-labeledHeatmap(
-    Matrix = TraitCor,
-    xLabels = names(bpoTraits),
-    yLabels = rownames,
-    ySymbols = rownames,
-    colorLabels = TRUE,
-    colors = viridis(50),
-    textMatrix = textMatrix,
-    setStdMargins = TRUE,
-    cex.text = 0.5,
-    main = paste(list)
-    )
-#dev.off()
-}
-dev.off()
-###Save plots with parameter values, then run a whole lot of them
-
-library("pheatmap")
-
-par(mar=c(1,1,1,1))
-par(mfrow = c(5,1))
-
-for (list in colnames(MTC)){
-  TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% MTC[,list],]
-rownames<-row.names(TraitCor)
-  
-Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in%  MTC[,list],]
-filename<-gsub(" ","",paste("WGCNA_",list,".pdf"))
-#pdf(file=filename,width = 8, height = 7)
-
-
-
-textMatrix = paste(signif(TraitCor, 2),
-                   "\n(",
-                   signif(Pvalue, 1),
-                   ")",
-                   sep = "")
-if(is.null(dim(TraitCor))){
-  dim(TraitCor)=c(1,4)
-} else {
-  dim(TraitCor)=dim(TraitCor)
-}
-  
-  
-  
-dim(textMatrix) <- dim(TraitCor)
-
-
-#display the corelation values with a heatmap plot
-# 
-# labeledHeatmap(
-#     Matrix = TraitCor,
-#     xLabels = names(bpoTraits),
-#     yLabels = rownames,
-#     ySymbols = rownames,
-#     colorLabels = TRUE,
-#     colors = viridis(50),
-#     textMatrix = textMatrix,
-#     setStdMargins = TRUE,
-#     cex.text = 0.5,
-#     main = paste(list)
-#     )
-# 
-
-pheatmap(
-  mat=TraitCor,
-  color=viridis(20),
-  cluster_rows = F,
-  cluster_cols = F,
-  cellheight = 10,
-)
-  
-
-    
-    
-
-#dev.off()
-}
-
-
-```
-
-
-```{r combo figure}
-par(mar=c(1,1,1,1),mfrow=c(1,1))
-order_of_modules<-c(Pheromone_ME,Food_Phero_ME, BP_unique_ME, EBO_unique_ME, Food_unique_ME)
-
-moduleTraitCor1<-moduleTraitCor[order_of_modules,]
-
-moduleTraitCor1<-moduleTraitPvalue[order_of_modules,]
-
-table<-module_hub_category$category%>%table()
-table<-table[colnames(MTC)]
-
-horizontaly<-c()
-for (i in 1:length(table)){
-  horizontaly<-c(horizontaly,sum(table[1:i]))
-}
-textMatrix = paste(signif(moduleTraitCor1, 2),
-                   "\n(",
-                   signif(moduleTraitPvalue1, 1),
-                   ")",
-                   sep = "")
-dim(textMatrix) = dim(moduleTraitCor1)
-
-
-labeledHeatmap(
-    Matrix = moduleTraitCor1[order_of_modules,],
-    xLabels = names(bpoTraits),
-    yLabels = order_of_modules,
-    ySymbols = rownames(moduleTraitCor1),
-    colorLabels = FALSE,
-    colors = viridis(50),
-    textMatrix = textMatrix,
-    setStdMargins = TRUE,
-    cex.text = 0.5,
-    main = paste("Module-trait relationships")
-)
-
-
-```
-
-
-```{r plotting variables}
-library(colorspace)
-
-pd=position_dodge(.7)
-blues<-c("#bae4bc","#7bccc4","#43a2ca","#0868ac")
-reds<-c("#d7b5d8", "#df65b0", "#dd1c77", "#980043")
-greens<-c("#bae4b3", "#74c476", "#31a354","#006d2c")
-purples<-c("#edf8fb", "#b3cde3", "#8c96c6","#8856a7")
-blgreen<-c("#f0f9e8", "#bae4bc", "#7bccc4", "#2b8cbe")
-Yl_O_Pi<-c("#ffff99","#fdb462", "#fb8072")#brewer accent
-
-
-browngreen <- rainbow_hcl(4, start = 30, end = 300) ##colorspace
-bluesreds<-c(rbind(blues,reds))
-blgreen_purple<-c(rbind(blgreen, purples))
-greenblues<-c(rbind(greens, blues))
-
-
-#blues reds with nectar pollen [3,4]
-#browngreen with pheromone
-
-```
-
-
-```{r trying out ggplot}
-###trying out different plots
-library(ggplot2)
-bpo.info = read.csv("bpo_info.csv", header = T)
-# 
-# [1] "MEpurple"      
-#  [2] "MEmidnightblue"
-#  [3] "MEblue"        
-#  [4] "MEgreen"       
-#  [5] "MEbrown"       
-#  [6] "MEtan"         
-#  [7] "MEyellow"      
-#  [8] "MEturquoise"   
-#  [9] "MEred"         
-# [10] "MEcyan"        
-# [11] "MEgreenyellow" 
-# [12] "MEmagenta"     
-# [13] "MEsalmon"      
-# [14] "MEblack"       
-# [15] "MEpink"   
-
-MEs1<-MEs[,1:7]
-MEs2<-MEs[,8:dim(MEs)[2]]
-MEs_pollen<-MEs[,c(11,10,12,13,6,1)]
-MEs_BP<-MEs[,c(5,14)]
-MEs_Oci<-MEs[,c(5,6,8,12)]
-
-
-MEs1_withsubject <- cbind(MEs1, bpo.info)
-MEs2_withsubject <- cbind(MEs2, bpo.info)
-MEBP_withsubject <- cbind(MEs_BP, bpo.info)
-MEOci_withsubject <- cbind(MEs_Oci, bpo.info)
-MEPollen_withsubject <- cbind(MEs_pollen, bpo.info)
-# 
-# MEs1.long <- gather(MEs1_withsubject, Module, Loading, MEpurple:MEbrown)
-# 
-# MEs2.long <- gather(MEs2_withsubject, Module, Loading, MEtan:MEpink)
-# 
- MEsBP.long <- gather(MEBP_withsubject, Module, Loading, MEbrown:MEblack)
-# 
- MEsOCI.long <- gather(MEOci_withsubject, Module, Loading, MEbrown:MEmagenta)
-
-MEsPollen.long <- gather(MEPollen_withsubject, Module, Loading, MEgreenyellow:MEpurple)
-
-# 
-# ggplot(MEs1.long, aes(x = Subject, y = Loading, fill = Food)) + geom_bar(stat ="identity") + facet_wrap( ~ Module)
-# 
-# ggplot(MEs2.long, aes(x = Subject, y = Loading, fill = Food)) + geom_bar(stat ="identity") + facet_wrap( ~ Module)+
-#   theme(axis.text.x=element_text(angle=90,hjust=1))
-# 
-# ggplot(MEs1.long, aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") + facet_wrap( ~ Module)+
-#   theme(axis.text.x=element_text(angle=90,hjust=1))
-# 
-# ggplot(MEs2.long, aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") + facet_wrap( ~ Module)+
-#   theme(axis.text.x=element_text(angle=90,hjust=1))
-# 
-
-###associated with pollen v nectar
-MEsPollen.long$Module2<-factor(MEsPollen.long$Module,levels =c("MEcyan", "MEgreenyellow", "MEmagenta", "MEsalmon","MEpurple", "MEtan"))
-levels(MEsPollen.long$Module2)<-c("MEcyan (P=0.02)","MEgreenyellow (P<.001)","MEmagenta (P=0.01)","MEsalmon (P=0.01)", "MEpurple (P=0.02)","MEtan (P=0.02)")
-# 
-# Pollen_ME_names<-list(
-#     "MEcyan"= "MEcyan (P=0.02)", 
-#     "MEgreenyellow" = "MEgreenyellow (P<.001)", 
-#     "MEmagenta" = "MEmagenta (P=0.01)", 
-#     "MEsalmon" = "MEsalmon (P=0.01)",
-#     "MEpurple" = "MEpurple (P=0.02)", 
-#     "MEtan" = "MEtan (P=0.02)"
-# )
-
-Module_nectar_all<-ggplot(MEsPollen.long, aes(x = Subject, y = Loading, fill = Food)) + geom_bar(stat ="identity") + facet_grid(Module2 ~ .)+
-    scale_fill_manual(values=bluesreds[3:4])+theme_bw(12)+
-  theme(axis.text.x=element_text(angle=45,hjust=1,vjust = 1.05))
-
-ggsave(filename = "Module_nectar_all.pdf",plot = Module_nectar_all, width = 8, height = 11, units = "in",dpi = 300)
-
-
-Module_nectar_greenyellow<-ggplot(subset(MEsPollen.long, Module %in% c("MEgreenyellow")), aes(x = Subject, y = Loading, fill = Food)) + geom_bar(stat ="identity") + facet_wrap( ~ Module2)+
-    scale_fill_manual(values=bluesreds[3:4])+theme_bw(15)+
-  theme(axis.text.x=element_text(angle=45,hjust=1,vjust = 1.05))
-
-ggsave(filename = "Module_nectar_greenyellow.pdf",plot = Module_nectar_greenyellow, width = 11, height = 8, units = "in",dpi = 300)
-
-
-##associated with BP
-MEsBP.long$Pheromone<-factor(MEsBP.long$Pheromone, levels=c("Control","BroodP","Ocimene"))
-MEsBP.long$Module2<-factor(MEsBP.long$Module,levels =c("MEblack", "MEbrown"))
-levels(MEsBP.long$Module2)<-c("MEblack (P=0.03)","MEbrown (P=0.03)")
-
-Module_BP_all<-ggplot(MEsBP.long, aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") + facet_wrap( ~ Module2)+theme_bw(15)+
-  theme(axis.text.x=element_text(angle=45,hjust=1,vjust = 1.05))+scale_fill_manual(values=browngreen)
-ggsave(filename = "Module_BP_all.pdf",plot = Module_BP_all, width = 11, height = 8, units = "in",dpi = 300)
-
-
-##associated with Oci
-
-MEsOCI.long$Module2<-factor(MEsOCI.long$Module,levels =c("MEbrown", "MEtan", "MEmagenta", "MEturquoise"))
-levels(MEsOCI.long$Module2)<-c("MEbrown (P=0.009)","MEtan (P=0.005)","MEmagenta (P=0.001)","MEturquoise (P=0.04)")
-MEsOCI.long$Pheromone<-factor(MEsOCI.long$Pheromone, levels=c("Control","BroodP","Ocimene"),labels = c("Control","Brood Pheromone","Ocimene"))
-
-Module_Oci_all<-ggplot(MEsOCI.long, aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") + facet_wrap( ~ Module2)+theme_bw()+
-  theme(axis.text.x=element_text(angle=45,hjust=1,vjust = 1.05))+scale_fill_manual(values=browngreen)
-
-ggsave(filename = "Module_Oci_all.pdf",plot = Module_Oci_all, width = 11, height = 8, units = "in",dpi = 300)
-
-
-ME_both_pollen_pheromone<-ggplot(subset(MEsOCI.long, Module %in% c("MEtan","MEmagenta")), aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") + facet_grid( Module2~., labeller=label_value)+theme_bw(18)+
-  theme(axis.text.x=element_text(angle=45,hjust=1,vjust = 1.05))+scale_fill_manual(values=browngreen)
-ggsave(filename = "ME_both_pollen_pheromone.pdf",plot = ME_both_pollen_pheromone, width = 11, height = 8, units = "in",dpi = 300)
-
-
-
-```
-
-```{r specific plots for modules}
-#####specific plots
-
-ggplot(subset(MEs2.long, Module %in% c("MEmagenta")), aes(x = Subject, y = Loading, fill = Food)) + geom_bar(stat ="identity")+
-  theme(axis.text.x=element_text(angle=90,hjust=1))
-
-ggplot(subset(MEs2.long, Module %in% "MEtan"), aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity") +
-  theme(axis.text.x=element_text(angle=90,hjust=1))
-
-ggplot(subset(MEs2.long, Module %in% "MEblack"), aes(x = Subject, y = Loading, fill = Pheromone)) + geom_bar(stat ="identity")+
-  theme(axis.text.x=element_text(angle=90,hjust=1))
-
-
-
-```
-
-
-
-```{r pearson correlation traits}
-load("SamplesAndTraits_bpo.RData")
-load("Network_allSamples_signed_nomerge_RLDfiltered.RData")
-source("outersect.R")
-
-
-# Correlate traits --------------------------------------------------------
-
-#Define number of genes and samples
-nGenes = ncol(bpo.Expr)
-nSamples = nrow(bpo.Expr)
-
-bpoTraits<-bpoTraits%>%select(-Pheromone)
-
-#Recalculate MEs with color labels
-MEs0 = moduleEigengenes(bpo.Expr, moduleColors)$eigengenes
-MEs = orderMEs(MEs0)
-moduleTraitCor = cor(MEs, bpoTraits, use = "p")
-moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples)%>%as.data.frame()
-###multiple test corrections?
-```
-
-
-```{r module trait correlation}
-
-##setting up matrices
-
-#Food_Phero_Trait_Cor
-Food_Phero_TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% Food_Phero_ME,]
-
-Food_Phero_Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in% Food_Phero_ME,]
-
-
-#Phero Trait Cor
-Phero_TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% Pheromone_ME,]
-
-Phero_Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in% Pheromone_ME,]
-
-#EBO Trait Cor
-EBO_TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% EBO_unique_ME,]
-
-EBO_Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in% EBO_unique_ME,]
-
-#BP Trait Cor
-BP_TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% BP_unique_ME,]
-
-BP_Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in% BP_unique_ME,]
-
-##Food Trait Cor
-Food_TraitCor<-moduleTraitCor[row.names(moduleTraitCor) %in% Food_unique_ME,]
-
-Food_Pvalue<-moduleTraitPvalue[row.names(moduleTraitCor) %in% Food_unique_ME,]
-
-
-```
-
-```{r overall trait cor fig}
-library(viridis)
-#Print correlation heatmap between all modules and traits
-par(mfrow = c(1, 1))
-textMatrix = paste(signif(moduleTraitCor, 2),
-                   "\n(",
-                   signif(moduleTraitPvalue, 1),
-                   ")",
-                   sep = "")
-dim(textMatrix) = dim(moduleTraitCor)
-par(mar=c(5.1,4.1,4.1,2.1))
-
-#display the corelation values with a heatmap plot
-pdf(file="figures/WGNCA_All_Sig_Module_Trait_Relationship.pdf",width = 8, height = 7)
-labeledHeatmap(
-    Matrix = moduleTraitCor,
-    xLabels = names(bpoTraits),
-    yLabels = rownames(moduleTraitCor),
-    ySymbols = rownames(moduleTraitCor),
-    colorLabels = FALSE,
-    colors = viridis(50),
-    textMatrix = textMatrix,
-    setStdMargins = TRUE,
-    cex.text = 0.5,
-    main = paste("Module-trait relationships")
-)
-dev.off()
-
-###Save plots with parameter values, then run a whole lot of them
-
-```
