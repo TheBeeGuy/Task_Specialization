@@ -82,7 +82,7 @@ bp_info$PheroXFoodxLane<- factor(paste0(bp_info$Pheromone, bp_info$Food, bp_info
 ```{r read in gff with rtracklayer}
 
 tags<-c("seqid","ID","Dbxref","Name", "gbkey","gene","parent","transcript_id")
-gff2<-readGFF("GCF_003254395.2_Amel_HAv3.1_genomic.gff",tags=tags)
+gff2<-readGFF("gff3/GCF_003254395.2_Amel_HAv3.1_genomic.gff",tags=tags)
 
 
 ###find all RNAs
@@ -90,19 +90,19 @@ gff_rnalist2<-gff2[gff2$ID %like% "rna",]
 
 
 trial3<-gff_rnalist2[,c("ID", "Dbxref")]
-write.csv(trial3, "rnas_gff3.csv")
+write.csv(trial3, "data/rnas_gff3.csv")
 gff_rnalist2<-read.csv("rnas_gff3.csv",col.names = c("rowID","ID","GeneID","GenbankID","OtherID"))
 gff_rnalist2<-gff_rnalist2%>%select(-rowID)
 gff_rnalist2$GeneID<-gsub("c*\\(*GeneID:", "",gff_rnalist2$GeneID)
 gff_rnalist2$OtherID<-gsub("\\sBEEBASE:(GB\\d*)\\)", "\\1",gff_rnalist2$OtherID)
-write.csv(gff_rnalist2, "mRNA_Entrez_Genbank_beebase_conversion.csv")
+write.csv(gff_rnalist2, "data/mRNA_Entrez_Genbank_beebase_conversion.csv")
 
 tx2gene_HAv3.1<-gff_rnalist2%>%select(target.id=ID,GeneID=GeneID)
 ```
 
 
 ```{r tximport HAv3.1 }
-dir_HAv <- file.path("C:/Users/Rong/Desktop/results_HAv")#set file path
+dir_HAv <- file.path("C:/Users/Rong/Box Sync/Projects/Task_Specialization/results_HAv")#set file path
 list.files(dir_HAv)#sanity check that directories are present
 samples<-row.names(bp_info)#names of samples 
 
@@ -146,7 +146,7 @@ BPOseq1 <- DESeqDataSetFromTximport(txi= txi.kallisto.h5,
     colData = bp_info,
     design = ~ Pheromone+Food +Pheromone:Food)
 
- save(BPOseq1, file = "BPOseq1.RData")
+ save(BPOseq1, file = "data/BPOseq1.RData")
 
  
  
@@ -270,28 +270,28 @@ PheromoneEBOvBP_FoodPollen%>%get_sig_genes()->EBOvsBPxPollen_idx
 
 ##write files out
 write.csv(as.data.frame(Nect_Pollen_results),
-          file="BPO_FoodResutls_3Oct18.csv")
+          file="output/BPO_FoodResutls_3Oct18.csv")
 
 write.csv(as.data.frame(BP_results),
-          file="BPO_BPvControl_Results_3Oct18.csv")
+          file="output/BPO_BPvControl_Results_3Oct18.csv")
 
 write.csv(as.data.frame(EBO_results),
-          file="BPO_EBOvControl_Results_3Oct18.csv")
+          file="output/BPO_EBOvControl_Results_3Oct18.csv")
 
 write.csv(as.data.frame(BPvEBO_results),
-          file="BPO_EBOvBP_Results_3Oct18.csv")
+          file="output/BPO_EBOvBP_Results_3Oct18.csv")
 
 write.csv(as.data.frame(PheromoneEBO_FoodPollen),
-          file="BPO_EBOxFood_Results_3Oct18.csv")
+          file="output/BPO_EBOxFood_Results_3Oct18.csv")
 
 write.csv(as.data.frame(PheromoneBP_FoodPollen),
-          file="BPO_BPXFood_Results_3Oct18.csv")
+          file="output/BPO_BPXFood_Results_3Oct18.csv")
 
 write.csv(as.data.frame(PheromoneEBOvBP_FoodPollen),
-          file="BPO_BPvEBOXFood_Results_3Oct18.csv")
+          file="output/BPO_BPvEBOXFood_Results_3Oct18.csv")
 
 write.csv(as.data.frame(counts(BPO_DEG1)),
-          file="collapsed_TPM_BPO_DEG1_26oct2018.csv")
+          file="output/collapsed_TPM_BPO_DEG1_26oct2018.csv")
 
 
 ```
@@ -360,9 +360,9 @@ length(Phero_genes)<-length(Food_genes)<-length(interxn_genes)<-length(allDEG)<-
 
 
 DEG_summary_all_lists<-as.data.frame(cbind(Phero_genes,Food_genes,interxn_genes,allDEG,Food_down,Food_up,EBO_down,EBO_up,BP_up,BP_down, BPvEBO_up, BPvEBO_down,background))
-write.table(DEG_summary_all_lists,"DEG_summary_19dec18_p0.05.txt",sep="\t",na = "",row.names = F)
-write.csv(DEG_summary_all_lists,"DEG_summary_19dec18_p0.05.csv")
-save(DEG_summary_all_lists,file="deg_summary_all_lists.RData")
+write.table(DEG_summary_all_lists,"output/DEG_summary_19dec18_p0.05.txt",sep="\t",na = "",row.names = F)
+write.csv(DEG_summary_all_lists,"output/DEG_summary_19dec18_p0.05.csv")
+save(DEG_summary_all_lists,file="data/deg_summary_all_lists.RData")
 ```
 
 
