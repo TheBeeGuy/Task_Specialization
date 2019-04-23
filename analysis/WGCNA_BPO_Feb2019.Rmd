@@ -652,7 +652,7 @@ weighted = TRUE,
 threshold = 0.02,
 nodeNames = modProbes,
 altNodeNames = modGenes,
-nodeAttr = moduleColors[inModule]);
+nodeAttr = moduleColors[inModule])
 ```
 
 
