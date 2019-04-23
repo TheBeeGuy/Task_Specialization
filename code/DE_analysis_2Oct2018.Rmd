@@ -783,4 +783,3 @@ overlap_food_down_ebovc<-intersect(EBOvsCTRL_idx,Food_down)%>%unique()%>%length(
 1-phyper(overlap_food_down_ebovc, n_food, total_genes-n_food, n_ebo_v_control, lower.tail = T, log.p = F)#down
 
 ```
-
