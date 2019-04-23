@@ -1,0 +1,8 @@
+ID	Gene Name	Species
+acetyl-CoA carboxylase(LOC552286)	acetyl-CoA carboxylase(LOC552286)	Apis mellifera	
+acyl-CoA Delta(11) desaturase(LOC412166)	acyl-CoA Delta(11) desaturase(LOC412166)	Apis mellifera	
+elongation of very long chain fatty acids protein 6(LOC725031)	elongation of very long chain fatty acids protein 6(LOC725031)	Apis mellifera	
+elongation of very long chain fatty acids protein 7(LOC725255)	elongation of very long chain fatty acids protein 7(LOC725255)	Apis mellifera	
+elongation of very long chain fatty acids protein AAEL008004-like(LOC409638)	elongation of very long chain fatty acids protein AAEL008004-like(LOC409638)	Apis mellifera	
+elongation of very long chain fatty acids protein AAEL008004-like(LOC413789)	elongation of very long chain fatty acids protein AAEL008004-like(LOC413789)	Apis mellifera	
+elongation of very long chain fatty acids protein AAEL008004-like(LOC550828)	elongation of very long chain fatty acids protein AAEL008004-like(LOC550828)	Apis mellifera	

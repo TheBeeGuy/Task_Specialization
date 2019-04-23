@@ -1,0 +1,1503 @@
+---
+title: "BPO_rnaseq"
+author: "Rong"
+date: "Tuesday, December 08, 2015"
+output: html_document
+---
+
+```{r load packages}
+#DL the package
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+    #install.packages("BiocManager")
+#BiocManager::install("KEGGprofile", version = "3.8")
+
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+    #install.packages("BiocManager")
+#BiocManager::install("topGO", version = "3.8")
+
+
+source("https://bioconductor.org/biocLite.R")
+#biocLite("edgeR") 
+#biocLite("DESeq2")
+#biocLite("apeglm")
+#biocLite("tximport")
+#biocLite("tximportData")
+#biocLite("rhdf5")
+#biocLite("vcn")
+library("rhdf5")
+#library("vcn")
+library("tximport")
+library(topGO)
+library(KEGGprofile)
+library("rtracklayer")
+#library("apeglm")
+#library("edgeR") #edgeRUsersGuide()
+library(DESeq2)#browseVignettes("DESeq2")
+
+#library(locfit)
+library(gplots)
+#library(dplyr)
+#library(pvclust)
+#library(fpc)
+#library(tissuesGeneExpression)
+library(data.table)
+library(kohonen)
+library(tidyverse)
+
+
+```
+
+###LOAD DATA
+```{r read in data}
+#laptop
+setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq")
+source("get_significant_genes_function.R")
+#Desktop
+#setwd("D:/Dropbox/Projects/BPO_rnaseq")
+#x<-read.table(file = "gene_counts_2Oct18.txt", header=T)##addin row.names=1
+
+#x1<-read.table(file = "counts_kallisto_rounded.txt", header=T)
+
+##TPM Kallisto
+#x1<-read.table(file = "tpm_kallisto_rounded.txt", header=T)
+
+
+#read in sample info
+bp_info<-read.csv(file="Bpo_info.csv", row.names=1, header=T)
+
+
+bp_info$PheroXFood<- factor(paste0(bp_info$Pheromone, bp_info$Food))
+bp_info$PheroXFoodxLane<- factor(paste0(bp_info$Pheromone, bp_info$Food, bp_info$Lane))
+
+#sanity check that names of samples are same in counts file and sample info file
+ #all(rownames(bp_info) == colnames(x))
+
+
+#x.deg<-read.csv(file="DEG_all.csv", row.names=1, header =T)
+#avg<-read.csv(file="DEG_avg.csv", row.names=1, header =T)
+
+#tx2gene<-read.table(file = "tx2gene.txt", header=T)
+```
+
+```{r read in gff with rtracklayer}
+
+tags<-c("seqid","ID","Dbxref","Name", "gbkey","gene","parent","transcript_id")
+gff2<-readGFF("GCF_003254395.2_Amel_HAv3.1_genomic.gff",tags=tags)
+
+
+###find all RNAs
+gff_rnalist2<-gff2[gff2$ID %like% "rna",]
+
+
+trial3<-gff_rnalist2[,c("ID", "Dbxref")]
+write.csv(trial3, "rnas_gff3.csv")
+gff_rnalist2<-read.csv("rnas_gff3.csv",col.names = c("rowID","ID","GeneID","GenbankID","OtherID"))
+gff_rnalist2<-gff_rnalist2%>%select(-rowID)
+gff_rnalist2$GeneID<-gsub("c*\\(*GeneID:", "",gff_rnalist2$GeneID)
+gff_rnalist2$OtherID<-gsub("\\sBEEBASE:(GB\\d*)\\)", "\\1",gff_rnalist2$OtherID)
+write.csv(gff_rnalist2, "mRNA_Entrez_Genbank_beebase_conversion.csv")
+
+tx2gene_HAv3.1<-gff_rnalist2%>%select(target.id=ID,GeneID=GeneID)
+```
+
+
+```{r tximport HAv3.1 }
+dir_HAv <- file.path("C:/Users/Rong/Desktop/results_HAv")#set file path
+list.files(dir_HAv)#sanity check that directories are present
+samples<-row.names(bp_info)#names of samples 
+
+#combine paths, folders of all the samples, and the abundances of all samples 
+files_tsv <- file.path(dir_HAv, samples, "abundance.tsv")#files tsv
+
+#files <- file.path(dir, samples, "abundance.h5") 
+
+names(files_tsv)<-samples#set sample names of the files
+all(file.exists(files_tsv))##sanity check that all files actually exist and paths referring to them are correct
+
+
+##this is the first method of importing, where you keep original counts and use an offset
+# txi.kallisto.tsv <- tximport(files_tsv, type = "kallisto",txOut = FALSE, tx2gene=tx2gene_HAv3.1,countsFromAbundance = "no")
+
+##alternatively, second method that uses length scaled TPM
+files_h5 <- file.path(dir_HAv, samples, "abundance.h5")
+
+txi.kallisto.h5 <- tximport(files_h5, type = "kallisto",txOut = FALSE, tx2gene=tx2gene_HAv3.1,countsFromAbundance = "lengthScaledTPM")
+
+#this becomes data set 
+#txi.kallisto.h5$counts[1:5,1:5]
+
+```
+
+
+
+###DIFFERENTIAL EXPRESSION
+```{r DESeq}
+#method1, counts with offset
+#BPOseq1 <- DESeqDataSetFromTximport(txi.kallisto.tsv, bp_info, ~Pheromone+Food +Pheromone:Food)
+
+
+
+#method 2
+#using abundances
+
+# load("BPOseq1.RData")
+
+BPOseq1 <- DESeqDataSetFromTximport(txi= txi.kallisto.h5,
+    colData = bp_info,
+    design = ~ Pheromone+Food +Pheromone:Food)
+
+ save(BPOseq1, file = "BPOseq1.RData")
+
+ 
+ 
+BPOseq1 <- collapseReplicates(object = BPOseq1,groupby = BPOseq1$SampleID, renameCols = F)
+
+
+
+BPOseq1$Pheromone <- relevel(BPOseq1$Pheromone, ref = "Control")
+BPOseq1$Food <- relevel(BPOseq1$Food, ref = "Nectar")
+
+
+##Go  through each row and determine every value > or= 1
+row_sub = apply(txi.kallisto.h5$abundance, 1, function(row) all(row >=1 ))
+##how many genes filtered
+row_sub%>%table()
+
+#this ensures only using genes with at least 1 TPM
+BPOseq1 <- BPOseq1[row_sub,]
+BPO_DEG1<-DESeq(BPOseq1)
+
+resultsNames(BPO_DEG1)
+
+results_BPO1 <- results(BPO_DEG1)
+resOrdered_BPO1 <- results_BPO1[order(results_BPO1$padj),]
+
+```
+
+
+
+```{r DEG Pheromone}
+
+###DEG Pheromone Main Effects
+
+####BP vs EBO
+results(BPO_DEG1, contrast =c("Pheromone","BP","EBO"),alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, contrast =c("Pheromone","BP","EBO"),alpha = 0.05)->BPvEBO_results
+
+
+BPvEBO_results <- BPvEBO_results[order(BPvEBO_results$log2FoldChange
+),]%>%subset(padj<0.05)
+
+BPvEBO_idx<-BPvEBO_results%>%get_sig_genes()
+
+
+##BP vs Control
+results(BPO_DEG1, contrast =c("Pheromone","BP","Control"),alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, contrast =c("Pheromone","BP","Control"),alpha = 0.05)->BP_results
+
+BP_results <- BP_results[order(BP_results$log2FoldChange
+),]%>%subset(padj<0.05)
+
+BP_results%>%get_sig_genes()->BPvCTRL_idx
+
+
+
+
+#EBO vs Control
+results(BPO_DEG1, contrast =c("Pheromone","EBO","Control"),alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, contrast =c("Pheromone","EBO","Control"),alpha = 0.05)->EBO_results
+
+EBO_results <- EBO_results[order(EBO_results$log2FoldChange
+),]%>%subset(padj<0.05)
+
+EBOvsCTRL_idx<-EBO_results%>%get_sig_genes()
+```
+
+
+
+```{r DEG Food}
+###DEG Food Main effect
+
+results(BPO_DEG1, contrast =c("Food","Pollen","Nectar"),alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, contrast =c("Food","Pollen","Nectar"),alpha = 0.05)->Nect_Pollen_results
+
+Nect_Pollen_results <- Nect_Pollen_results[order(Nect_Pollen_results$log2FoldChange
+),]%>%subset(padj<0.05)
+
+
+
+Nect_Pollen_results%>%get_sig_genes()->NvP_idx
+
+```
+
+```{r DEG interaction}
+##interaction effects
+
+#Pheromone BP comparing between pollen and nectar foragers
+results(BPO_DEG1, name = "PheromoneBP.FoodPollen",alpha = 0.05)%>%summary()
+results(BPO_DEG1, name = "PheromoneBP.FoodPollen",alpha = 0.05)->PheromoneBP_FoodPollen
+
+PheromoneBP_FoodPollen <- PheromoneBP_FoodPollen[order(PheromoneBP_FoodPollen$log2FoldChange
+),]%>%subset(padj<0.05)
+
+PheromoneBP_FoodPollen%>%get_sig_genes() ->BPxPollen_idx
+
+##Pheromone EBO comparing between pollen and nectar foragers
+results(BPO_DEG1, name = "PheromoneEBO.FoodPollen",alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, name = "PheromoneEBO.FoodPollen",alpha = 0.05)->PheromoneEBO_FoodPollen
+
+
+PheromoneEBO_FoodPollen <- PheromoneEBO_FoodPollen[order(PheromoneEBO_FoodPollen$log2FoldChange
+),]%>%subset(padj<0.05)
+
+PheromoneEBO_FoodPollen%>%get_sig_genes()->EBOxPollen_idx
+
+##BP vs EBO comparing between pollen and nectar foragers
+results(BPO_DEG1, contrast = list( "PheromoneEBO.FoodPollen","PheromoneBP.FoodPollen" ),alpha = 0.05)%>%summary()
+
+results(BPO_DEG1, contrast = list( "PheromoneEBO.FoodPollen","PheromoneBP.FoodPollen" ),alpha = 0.05)->PheromoneEBOvBP_FoodPollen
+
+PheromoneEBOvBP_FoodPollen <- PheromoneEBOvBP_FoodPollen[order(PheromoneEBOvBP_FoodPollen$log2FoldChange
+),]%>%subset(padj<0.05)
+
+PheromoneEBOvBP_FoodPollen%>%get_sig_genes()->EBOvsBPxPollen_idx
+
+
+##write files out
+write.csv(as.data.frame(Nect_Pollen_results),
+          file="BPO_FoodResutls_3Oct18.csv")
+
+write.csv(as.data.frame(BP_results),
+          file="BPO_BPvControl_Results_3Oct18.csv")
+
+write.csv(as.data.frame(EBO_results),
+          file="BPO_EBOvControl_Results_3Oct18.csv")
+
+write.csv(as.data.frame(BPvEBO_results),
+          file="BPO_EBOvBP_Results_3Oct18.csv")
+
+write.csv(as.data.frame(PheromoneEBO_FoodPollen),
+          file="BPO_EBOxFood_Results_3Oct18.csv")
+
+write.csv(as.data.frame(PheromoneBP_FoodPollen),
+          file="BPO_BPXFood_Results_3Oct18.csv")
+
+write.csv(as.data.frame(PheromoneEBOvBP_FoodPollen),
+          file="BPO_BPvEBOXFood_Results_3Oct18.csv")
+
+write.csv(as.data.frame(counts(BPO_DEG1)),
+          file="collapsed_TPM_BPO_DEG1_26oct2018.csv")
+
+
+```
+
+
+```{r collecting all significant genes}
+#pheromone genes
+Phero_genes<-unique(c(BPvCTRL_idx,BPvEBO_idx,EBOvsCTRL_idx))
+
+#Foraging genes
+Food_genes<-NvP_idx
+
+#Interaction
+interxn_genes<-unique(c(BPxPollen_idx,EBOxPollen_idx,EBOvsBPxPollen_idx))
+
+##allDEG
+allDEG<-unique(c(Phero_genes,Food_genes,interxn_genes))
+
+##allgenes
+background<-rownames(BPO_DEG1)
+
+
+
+##BP vs Control up vs down
+
+results(BPO_DEG1, contrast =c("Pheromone","BP","Control"))->BP_results
+
+BP_up <- BP_results%>%subset(padj<0.05 & log2FoldChange>0)%>%get_sig_genes()
+
+BP_down <- BP_results%>%subset(padj<0.05 & log2FoldChange<0)%>%get_sig_genes()
+
+
+#EBO vs Control up vs down
+
+results(BPO_DEG1, contrast =c("Pheromone","EBO","Control"))->EBO_results
+
+EBO_down <- EBO_results%>%subset(padj<0.05 & log2FoldChange<0)%>%get_sig_genes()
+
+EBO_up <- EBO_results%>%subset(padj<0.05 & log2FoldChange>0)%>%get_sig_genes()
+
+##Food Maian effect up vs down
+
+results(BPO_DEG1, contrast =c("Food","Pollen","Nectar"))->Nect_Pollen_results
+
+Food_up<- Nect_Pollen_results%>%subset(padj<0.05 & log2FoldChange>0)%>%get_sig_genes()
+
+Food_down<- Nect_Pollen_results%>%subset(padj<0.05 & log2FoldChange<0)%>%get_sig_genes()
+
+Nect_Pollen_results%>%get_sig_genes()->NvP_idx
+
+
+##BP vs EBO Main effect up vs down
+
+results(BPO_DEG1, contrast =c("Pheromone","EBO","BP"))->BPvEBO_results
+
+BPvEBO_up<- BPvEBO_results%>%subset(padj<0.05 & log2FoldChange>0)%>%get_sig_genes()
+
+BPvEBO_down<- Nect_Pollen_results%>%subset(padj<0.05 & log2FoldChange<0)%>%get_sig_genes()
+
+BPvEBO_results%>%get_sig_genes()->BPvEBO_idx
+
+
+
+#set length for all lists to prepare for combining
+length(Phero_genes)<-length(Food_genes)<-length(interxn_genes)<-length(allDEG)<-length(Food_up)<-length(Food_down)<-length(BP_up)<-length(BP_down)<-length(EBO_up)<-length(EBO_down)<-length(BPvEBO_up)<- length(BPvEBO_down)<-length(background)
+
+
+DEG_summary_all_lists<-as.data.frame(cbind(Phero_genes,Food_genes,interxn_genes,allDEG,Food_down,Food_up,EBO_down,EBO_up,BP_up,BP_down, BPvEBO_up, BPvEBO_down,background))
+write.table(DEG_summary_all_lists,"DEG_summary_19dec18_p0.05.txt",sep="\t",na = "",row.names = F)
+write.csv(DEG_summary_all_lists,"DEG_summary_19dec18_p0.05.csv")
+save(DEG_summary_all_lists,file="deg_summary_all_lists.RData")
+```
+
+
+###KEGG PATHWAYS
+```{r kegg pathways}
+load("deg_summary_all_lists.RData")
+attach(DEG_summary_all_lists)
+vst<-read.table(file="varianceStabilized_counts.txt",header = T)
+
+
+##
+download_KEGGfile(species="ame")
+KEGG_All<-find_enriched_pathway(allDEG,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_phero<-find_enriched_pathway(Phero_genes,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_intrxn<-find_enriched_pathway(interxn_genes,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_food<-find_enriched_pathway(Food_genes,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_bp<-find_enriched_pathway(c(BP_down,BP_up),species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_bp_down<-find_enriched_pathway(BP_down,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_bp_up<-find_enriched_pathway(BP_up,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_ebo_up<-find_enriched_pathway(EBO_up,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_ebo_down<-find_enriched_pathway(EBO_down,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_ebo<-find_enriched_pathway(c(EBO_down,EBO_up),species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_food_up<-find_enriched_pathway(Food_up,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+KEGG_food_down<-find_enriched_pathway(Food_down,species='ame',refGene = background,returned_adjpvalue = 0.05)
+
+###
+plot_pathway_cor(gene_expr = vst,kegg_enriched_pathway=KEGG_All)
+
+plot_pathway_cor(gene_expr = vst,kegg_enriched_pathway=KEGG_phero)
+
+plot_pathway_cor(gene_expr = vst,kegg_enriched_pathway=KEGG_food)
+
+detach(DEG_summary_all_lists)
+```
+
+
+
+##PLOTS
+````{r heatmap pheatmap package}
+library("RColorBrewer")
+library("pheatmap")
+library(genefilter)
+library(viridis)
+library(gplots)
+library(pvclust)
+library(dendextend)
+##dds is the BPOseq1
+##res is BPO_DEG1
+# this gives log2(n + 1)
+ntd <- normTransform(BPOseq1)#normalized
+vsd <- vst(BPOseq1, blind=TRUE)
+#rld <- rlog(BPOseq1, blind=TRUE) #takes forever
+
+write.table(assay(vsd), file="varianceStabilized_counts.txt", sep="\t") ##these get used for WGCNA
+#vsd<-read.table(file="varianceStabilized_counts.txt",header = T,)
+
+###Running these again to get rid of lengths
+#pheromone genes
+Phero_genes<-unique(c(BPvCTRL_idx,BPvEBO_idx,EBOvsCTRL_idx))
+
+#Foraging genes
+Food_genes<-NvP_idx
+
+#Interaction
+interxn_genes<-unique(c(BPxPollen_idx,EBOxPollen_idx,EBOvsBPxPollen_idx))
+
+##allDEG
+allDEG<-unique(c(Phero_genes,Food_genes,interxn_genes))
+
+##allgenes
+background<-rownames(BPO_DEG1)
+
+
+
+
+
+
+like.d <- dist( t(assay(vsd)) )
+like.e<-assay(vsd)
+like.km <- kmeans(t(like.e), centers=6)
+
+
+
+rv <- rowVars(like.e)
+idx <- order(-rv)[1:50]
+
+
+select <- order(rowMeans(counts(BPOseq1,normalized=FALSE)), decreasing=TRUE)[1:200]
+
+
+
+
+
+##create the sample designations
+
+categories<-c("Pheromone","Food")#what categories to focus on
+#categories<-c("PheroXFood")
+df <- as.data.frame(colData(BPOseq1)[,categories])
+
+
+##Trying out what these transformations look like for most highly expressed genes
+pheatmap(assay(ntd)[select,], cluster_rows=TRUE, show_rownames=FALSE,
+         cluster_cols=TRUE, annotation_col=df)
+
+pheatmap(assay(vsd)[select,], cluster_rows=TRUE, show_rownames=FALSE,         cluster_cols=TRUE, annotation_col=df)
+
+
+pheatmap(assay(vsd)[select,], cluster_rows=TRUE, show_rownames=FALSE,         cluster_cols=TRUE, annotation_col=df)
+
+
+##using indexes generated above
+hmcol <- viridis(150)
+mycolors<-c("red","white","grey")
+#inferno
+#viridis
+
+pal<- brewer.pal(11,"RdBu") #or "BrBG"
+
+cols <- c(colorRampPalette(c(pal[11], pal[6]))(51), 
+    colorRampPalette(c(pal[6], pal[1]))(51)[-1])
+
+anot_col<- brewer.pal(12,"Paired") 
+
+annotation_colors <- list(
+  Food = c(Nectar=anot_col[1], Pollen=anot_col[11]),
+  Pheromone=c(Control=anot_col[12], BP =anot_col[4], EBO=anot_col[2])
+  )
+
+pheatmap(assay(vsd)[allDEG,], 
+         cluster_rows=TRUE, 
+         show_rownames=FALSE, 
+         show_colnames = F, 
+         cluster_cols=TRUE, 
+         annotation=df,
+         annotation_colors = annotation_colors,
+         clustering_method = "ward.D2",
+         clustering_distance_cols = "manhattan",
+         cutree_rows = 3,
+         cutree_cols = 6,
+         color=hmcol,
+         filename = "hclust_all_DEG_18Dec18.pdf",
+         width = 7,
+         height=6)
+
+##Pheromone Results
+pheatmap(assay(vsd)[BPvCTRL_idx,], cluster_rows=TRUE, show_rownames=FALSE,         cluster_cols=TRUE, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan", cutree_rows = 2, cutree_cols = 4, show_colnames = F)
+
+pheatmap(assay(vsd)[EBOvsCTRL_idx,], cluster_rows=TRUE, show_rownames=FALSE,         cluster_cols=TRUE, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan", cutree_rows = 2, cutree_cols = 4, filename = "Hclust_EBOvCTRL_12Nov18.pdf")
+
+pheatmap(assay(vsd)[BPvEBO_idx,], cluster_rows=TRUE, show_rownames=FALSE,         cluster_cols=TRUE, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan",cutree_rows = 2,cutree_cols = 3,)
+
+pheatmap(assay(vsd)[Phero_genes,], cluster_rows=TRUE, show_rownames=FALSE,show_colnames = F,         cluster_cols=T, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan",cutree_cols = 4, cutree_rows = 2,filename = "Hclust_PheroDEG_12Nov18.pdf")
+
+###Nectar v Pollen
+pheatmap(assay(vsd)[NvP_idx,], cluster_rows=TRUE, show_rownames=FALSE, show_colnames = F,         cluster_cols=TRUE, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan",cutree_cols = 2, cutree_rows = 2,filename = "Hclust_NectvPol_12Nov18.pdf")
+
+##Interaction
+pheatmap(assay(vsd)[interxn_genes,], cluster_rows=TRUE, show_rownames=FALSE,  show_colnames=FALSE, cluster_cols=T, annotation_col=df,clustering_method = "ward.D2",clustering_distance_cols = "manhattan",cutree_cols = 4, cutree_rows = 2, file="Hclust_Interxn_12Nov18.pdf")
+
+
+
+##find p-values for the clusters
+##all differnetially expressed genes
+
+cluster.pvalue<-pvclust(assay(vsd)[allDEG,], parallel = T, nboot=10000, method.hclust = "ward.D2", method.dist = "manhattan")
+
+labels<-gsub("_S\\d*_L\\d*$", "", cluster.pvalue$hclust$labels)
+cluster.pvalue$hclust$labels<-labels
+
+plot(cluster.pvalue)
+pvrect(cluster.pvalue, alpha=0.95)
+
+##using dendextend to plot
+cluster.pvalue %>% as.dendrogram  %>% plot
+cluster.pvalue %>% text()
+cluster.pvalue %>% pvrect()
+
+#using ggplot to plot
+library(ggdendro)
+dend <- cluster.pvalue %>% as.dendrogram
+dendro_data(dend)%>%head()
+ggdendrogram(dend,labels = T)
+
+#interaction genes
+cluster.pvalue.intxn<-pvclust(assay(vsd)[interxn_genes,], parallel = T, nboot=10000, method.hclust = "ward.D2", method.dist = "manhattan")
+
+plot(cluster.pvalue.intxn,main="")
+pvrect(cluster.pvalue.intxn, alpha=0.95)
+
+
+
+
+
+##Sample distance matrix
+
+sampleDists <- dist(t(assay(vsd)))
+
+
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$condition, vsd$type, sep="-")
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+
+```
+
+###PCA
+```{r PCA}
+
+pcaData<-plotPCA(vsd, intgroup=c("Pheromone", "Food"),returnData=T)##including returnData=T returns the data frame useful for plotting in ggplot
+
+percentVar <- round(100 * attr(pcaData, "percentVar"))##calculate percent variance explained
+
+pca1<-plotPCA(vsd, intgroup=c("Pheromone", "Food"))+
+    theme_classic(20)
+##PC1 :38% PvN
+#PC2: 15% BP vs Others
+anot_col<- brewer.pal(12,"Paired") 
+pca2<-ggplot(pcaData,aes(PC1,PC2,shape=Pheromone))+
+  geom_point(size=3.5,color="black")+
+  geom_point(size=3,aes(color=Food))+
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()+
+  geom_vline(xintercept = 0, linetype="dotted")+
+  geom_hline(yintercept = 0, linetype="dotted")+
+  scale_color_manual(values =anot_col[c(1,11)])+
+  theme_classic(20)
+
+
+pcaData_allDEG<-plotPCA(vsd[allDEG,], intgroup=c("Pheromone", "Food"),returnData=T)
+
+
+pca3<-ggplot(pcaData_allDEG, aes(PC1,PC2, color=Food, shape=Pheromone))+geom_point(size=3)+
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()+geom_vline(xintercept = 0, linetype="dotted")+geom_hline(yintercept = 0, linetype="dotted")+theme_classic(20)
+
+ggsave(pca1, filename = "PCA1.pdf")
+ggsave(pca2, filename = "PCA2.pdf")
+ggsave(pca3, filename = "PCA3.pdf")
+```
+###HYPERGEOMETRIC
+```{r overlaps other studies}
+gene_id_beebase<-gff_rnalist2%>%select("GeneID","OtherID")
+colnames(gene_id_beebase)<-c("GeneID","Beebase")
+other_studies<-read.csv("Alaux_whitfield_microarray_lists.csv")
+
+background_genes_convert<-left_join(data.frame(GeneID=DEG_summary_all_lists$background),gene_id_beebase)%>%unique()
+background_genes_convert<-background_genes_convert[background_genes_convert$Beebase!="",]
+background_gene_list<-background_genes_convert$Beebase%>%unique()
+
+
+both_genes<-intersect(background_gene_list,other_studies$Microarray.Background)%>%unique
+both<-both_genes%>%length()#6039 total in both data
+
+get_unique_beebase<-function(x){
+  data<-left_join(data.frame(GeneID=x),gene_id_beebase)%>%unique()
+  return(data$Beebase[data$Beebase!=""])
+}
+
+myBP<-get_unique_beebase(BPvCTRL_idx)
+myBP_length<-length(myBP)
+
+myFood<-get_unique_beebase(Food_genes)
+myFood_length<-length(myFood)#264 genes
+
+
+
+#Hypergeometric test for Food genes compared to whitfield
+overlap_food_whit<-intersect(myFood,other_studies$NvF_whitfield)%>%unique()%>%length##58 in common
+whitfield<-intersect(other_studies$NvF_whitfield,both_genes)%>%unique%>%length()##839 in whitfield
+1-phyper(overlap_food_whit, whitfield, both-whitfield, myFood_length, lower.tail = TRUE, log.p = FALSE)
+##significant overlap between food related genes and nurse forager genes in whitefield
+
+#Hypergeometric test for BP compared to BP5
+overlapbp5<-intersect(myBP,other_studies$BP_5day)%>%length()
+BP5<-intersect(other_studies$BP_5day,both_genes)%>%length()
+
+1-phyper(overlapbp5, BP5, both-BP5, myBP_length, lower.tail = TRUE, log.p = FALSE)
+#0.25
+
+overlapbp_15<-intersect(other_studies$BP_15day,myBP)%>%length()
+BP15<-intersect(other_studies$BP_15day,both_genes)%>%length()
+1-phyper(overlapbp_15, BP15, both-BP15, myBP_length, lower.tail = TRUE, log.p = FALSE)
+#significant overlap with bp_15
+#p=0.008
+
+
+###this was not used for paper
+# overlap_allphero_bp15<-7
+# overlap_allphero_bp5<-5
+# allphero<-288
+# 
+# ##all phero with bp 5
+# 1-phyper(overlap_allphero_bp5, BP5, both-BP5, allphero, lower.tail = TRUE, log.p = FALSE)
+# #notsignificant
+# #0.3
+# 
+# ##all phero with bp 15
+# 1-phyper(overlap_allphero_bp15, BP15, both-BP15, allphero, lower.tail = TRUE, log.p = FALSE)
+# #significant
+# #0.0359
+# 
+# overlap_allphero_whit<-55
+# ##all phero with bp 15
+# 1-phyper(overlap_allphero_whit, whitfield, both-whitfield, allphero, lower.tail = TRUE, log.p = FALSE)
+# #p=0.001
+# ##also overlap between pheromone and nurse forager
+# 
+# 
+# #overlap all bp
+# overlapbp5_bp15<-4
+# BP5_15<-BP5+BP15
+# myBP<-61
+# 1-phyper(overlapbp5_bp15, BP5_15, both-BP5_15, myBP, lower.tail = TRUE, log.p = FALSE)
+# #0.25
+
+
+```
+
+```{r overlaps with pheromone genes}
+#Hypergeometric test for pheromone gene overlaps
+
+#BPvEBO with BPvC
+overlap_BPvEBO_BPvC<-intersect(
+  BPvEBO_idx,BPvCTRL_idx)%>%length()##8 in common
+n_bp_v_control<-BPvCTRL_idx%>%unique%>%length##58
+total_genes<-9179 #9179 total in both data
+n_bp_ebo<-BPvEBO_idx%>%length()##148 in bp vs EBO
+1-phyper(overlap_BPvEBO_BPvC, n_bp_v_control, total_genes-n_bp_v_control, n_bp_ebo, lower.tail = TRUE, log.p = FALSE)
+
+#BPvEBO with EBOvC
+overlap_BPvEBO_EBOvC<-intersect(BPvEBO_idx, EBOvsCTRL_idx)%>%length()##45 in common
+
+n_ebo_v_control<-EBOvsCTRL_idx%>%unique%>%length##58
+
+1-phyper(overlap_BPvEBO_EBOvC, n_ebo_v_control, total_genes-n_ebo_v_control, n_bp_ebo, lower.tail = TRUE, log.p = FALSE)
+
+#EBOvC with BP v C
+overlap_EBOvC_BPvC<-intersect(BPvCTRL_idx, EBOvsCTRL_idx)%>%length()##39 in common
+
+n_ebo_v_control<-EBOvsCTRL_idx%>%unique%>%length##152
+
+1-phyper(overlap_EBOvC_BPvC, n_ebo_v_control, total_genes-n_ebo_v_control, n_bp_v_control, lower.tail = T, log.p = F)
+
+find_enriched_pathway(gene = intersect(BPvCTRL_idx, EBOvsCTRL_idx),species = "ame",returned_adjpvalue = 0.05,) 
+
+
+```
+
+```{r overlaps b/w phero and food}
+
+## overlap bp and food
+n_food<-NvP_idx%>%unique%>%length
+overlap_food_bpvc<-intersect(BPvCTRL_idx,NvP_idx)%>%unique()%>%length()
+
+1-phyper(overlap_food_bpvc, n_food, total_genes-n_food, n_bp_v_control, lower.tail = T, log.p = F)
+
+
+##overlap ebo and food
+overlap_food_ebo<-intersect(EBOvsCTRL_idx,NvP_idx)%>%unique()%>%length()
+1-phyper(overlap_food_ebo, n_food, total_genes-n_food, n_ebo_v_control, lower.tail = T, log.p = F)
+
+##overlap bpvEBO and food
+overlap_food_ebovbp<-intersect(BPvEBO_idx,NvP_idx)%>%unique()%>%length()
+1-phyper(overlap_food_ebovbp, n_food, total_genes-n_food, n_bp_v_ebo, lower.tail = T, log.p = F)
+
+
+
+
+##overlap BPvEBO with pollen and nectar
+
+n_food_down<-Food_down%>%unique%>%length
+n_food_up<-Food_up%>%unique%>%length
+
+overlap_food_up_bpvebo<-intersect(BPvEBO_idx,Food_up)%>%unique()%>%length()
+
+overlap_food_down_bpvebo<-intersect(BPvEBO_idx,Food_down)%>%unique()%>%length()
+
+1-phyper(overlap_food_up_bpvebo, n_food, total_genes-n_food, n_bp_ebo, lower.tail = T, log.p = F)#up
+1-phyper(overlap_food_down_bpvebo, n_food, total_genes-n_food, n_bp_ebo, lower.tail = T, log.p = F)#down
+
+
+
+
+##overlap BP with pollen and nectar
+overlap_food_up_bpvc<-intersect(BPvCTRL_idx,Food_up)%>%unique()%>%length()
+
+overlap_food_down_bpvc<-intersect(BPvCTRL_idx,Food_down)%>%unique()%>%length()
+
+1-phyper(overlap_food_up_bpvc, n_food, total_genes-n_food, n_bp_v_control, lower.tail = T, log.p = F)#up
+1-phyper(overlap_food_down_bpvc, n_food, total_genes-n_food, n_bp_v_control, lower.tail = T, log.p = F)#down
+
+
+
+##overlap EBO with pollen and nectar
+overlap_food_up_ebovc<-intersect(EBOvsCTRL_idx,Food_up)%>%unique()%>%length()
+
+overlap_food_down_ebovc<-intersect(EBOvsCTRL_idx,Food_down)%>%unique()%>%length()
+
+1-phyper(overlap_food_up_ebovc, n_food, total_genes-n_food, n_ebo_v_control, lower.tail = T, log.p = F)#up
+1-phyper(overlap_food_down_ebovc, n_food, total_genes-n_food, n_ebo_v_control, lower.tail = T, log.p = F)#down
+
+```
+
+
+###Deprecated CODE###
+
+```{r 2 factor and interaction}
+BPOseq <- DESeqDataSetFromMatrix(
+    countData = x,
+    colData = bp_info,
+    design = ~ Pheromone+Food +Pheromone:Food)
+
+BPOseq <- collapseReplicates(object = BPOseq,groupby = BPOseq$SampleID, renameCols = F)
+
+
+
+BPOseq$Pheromone <- relevel(BPOseq$Pheromone, ref = "Control")
+BPOseq$Food <- relevel(BPOseq$Food, ref = "Nectar")
+
+keep <- rowSums(counts(BPOseq)) >= 10
+BPOseq <- BPOseq[keep,]
+BPO_DEG<-DESeq(BPOseq)
+
+resultsNames(BPO_DEG)
+
+results_BPO <- results(BPO_DEG)
+resOrdered_BPO <- results_BPO[order(results_BPO$pvalue),]
+summary(results_BPO)
+
+
+###Pheromone Main Effects###
+#BP vs EBO
+results(BPO_DEG, contrast =c("Pheromone","BP","EBO"))%>%summary()
+
+results(BPO_DEG, contrast =c("Pheromone","BP","EBO"))->BPvEBO_results
+
+##BP vs Control
+results(BPO_DEG, contrast =c("Pheromone","BP","Control"))%>%summary()
+results(BPO_DEG, contrast =c("Pheromone","BP","Control"))->BP_results
+
+#EBO vs Control
+results(BPO_DEG, contrast =c("Pheromone","EBO","Control"))%>%summary()
+
+results(BPO_DEG, contrast =c("Pheromone","EBO","Control"))->EBO_results
+
+
+##Food Maian effect
+results(BPO_DEG, contrast =c("Food","Pollen","Nectar"))%>%summary()
+
+results(BPO_DEG, contrast =c("Food","Pollen","Nectar"))->Nect_Pollen_results
+
+##interaction effects
+results(BPO_DEG, name = "PheromoneBP.FoodPollen")%>%summary()
+results(BPO_DEG, name = "PheromoneBP.FoodPollen")->PheromoneBP_FoodPollen
+
+results(BPO_DEG, name = "PheromoneEBO.FoodPollen")%>%summary()
+
+results(BPO_DEG, name = "PheromoneEBO.FoodPollen")->PheromoneEBO_FoodPollen
+
+##BP vs EBO comparing between pollen and nectar foragers
+results(BPO_DEG, contrast = list( "PheromoneEBO.FoodPollen","PheromoneBP.FoodPollen" ))%>%summary()
+
+# write.csv(as.data.frame(Nect_Pollen_results), 
+#           file="BPO_FoodResutls_3Oct18.csv")
+# 
+# write.csv(as.data.frame(BP_results), 
+#           file="BPO_BPvControl_Results_3Oct18.csv")
+# 
+# write.csv(as.data.frame(EBO_results), 
+#           file="BPO_EBOvControl_Results_3Oct18.csv")
+# 
+# write.csv(as.data.frame(BPvEBO_results), 
+#           file="BPO_EBOvBP_Results_3Oct18.csv")
+# 
+# write.csv(as.data.frame(PheromoneEBO_FoodPollen), 
+#           file="BPO_EBOxFood_Results_3Oct18.csv")
+# 
+# write.csv(as.data.frame(PheromoneBP_FoodPollen), 
+#           file="BPO_BPXFood_Results_3Oct18.csv")
+```
+
+
+```{r DEseq2 combined factors}
+
+
+
+BPOseq_combined <- DESeqDataSetFromMatrix(countData = x,
+                              colData = bp_info,
+                              design = ~ PheroXFood)
+BPOseq_combined <- collapseReplicates(object = BPOseq_combined,groupby = BPOseq_combined$SampleID, renameCols = F)
+
+
+BPOseq_combined$PheroXFood <- relevel(BPOseq_combined$PheroXFood, ref = "ControlNectar")
+BPOseq$Pheromone <- relevel(BPOseq$Pheromone, ref = "Control")
+BPOseq$Food <- relevel(BPOseq$Food, ref = "Pollen")
+##alternatively design can be ~PheroXFood or ~Pheromone + Food
+
+
+keep <- rowSums(counts(BPOseq_combined)) >= 10
+BPOseq_combined <- BPOseq_combined[keep,]
+BPO_DEG_combined<-DESeq(BPOseq_combined)
+results_BPO_combined <- results(BPO_DEG_combined)
+
+summary(results_BPO_combined)
+
+mcols(results_BPO)$description
+resultsNames(BPO_DEG_combined)
+
+results(BPO_DEG_combined, name = "PheroXFood_BPNectar_vs_ControlNectar")%>%summary
+
+results(BPO_DEG_combined, name = "PheroXFood_EBONectar_vs_ControlNectar")%>%summary
+
+results(BPO_DEG_combined, name = "PheroXFood_ControlPollen_vs_ControlNectar")%>%summary
+
+results(BPO_DEG_combined, contrast  = list("PheroXFood_EBONectar_vs_ControlNectar","PheroXFood_BPNectar_vs_ControlNectar"))%>%summary
+
+
+write.csv(as.data.frame(results_BPO), 
+          file="BPO_DEG_interaction_PheroXFood_2Oct18.csv")
+
+##we can also build results for different contrasts and export names
+# 
+# res <- results(dds, name="condition_treated_vs_untreated")
+# res <- results(dds, contrast=c("condition","treated","untreated"))
+sum(results_BPO$padj < 0.05, na.rm=TRUE)
+
+###log fold change shrinkage, not sure if this is useful
+
+resultsNames(BPO_DEG1)
+resLFC <- lfcShrink(BPO_DEG1, coef="Pheromone_BP_vs_Control", type="apeglm")
+resLFC
+plotMA(resLFC, ylim=c(-2,2))
+
+idx <- identify(resLFC$baseMean, resLFC$log2FoldChange)
+rownames(BPO_DEG1)[idx]
+```
+
+
+```{r LRT}
+
+
+##Using Likelihood Ratio Test to compare whether interaction are important
+##So these are genes for which the interaction significantly affects the expression
+
+BPO_DEG_LRT<-DESeq(BPOseq, test="LRT", reduced=~Pheromone+Food)
+results_BPO_LRT <- results(BPO_DEG_LRT)
+
+summary(results_BPO_LRT)
+sum(results_BPO_LRT$padj < 0.05, na.rm=TRUE)
+
+results(BPO_DEG_LRT, contrast =c("Pheromone","Control","BP"))%>%summary()
+
+results(BPO_DEG_LRT, contrast =c("Food","Pollen","Nectar"))%>%summary()
+
+resultsNames(BPO_DEG_LRT)
+
+##so to compare difference between Control vs BP in the nectar foragers compared to pollen foragers, Look at results of "PheromoneBP.FoodPollen"
+#based on bioconductor question, https://support.bioconductor.org/p/66202/, I think this is a ratio of (BP_in_Pollen/Control_in_Pollen) / (BP_in_Nectar/Control_in_Nectar)
+
+results(BPO_DEG_LRT, name="PheromoneBP.FoodPollen")%>%summary
+
+##Similarly, I think this is the difference between EBO and Control within Pollen Foragers / EBO and Cotnrol within NEctar Foragers
+
+results(BPO_DEG_LRT, name="PheromoneEBO.FoodPollen")%>%summary
+
+##To get BP vs EBO within pollen / BP vs EBO within nectar
+
+results(BPO_DEG_LRT, contrast=list("PheromoneEBO.FoodPollen", "PheromoneBP.FoodPollen"))%>%summary
+
+write.csv(as.data.frame(results_BPO_LRT), 
+          file="BPO_LRT_interactions_PheromoneXFood_3Oct18.csv")
+
+```
+
+
+```{r heatmap}
+ x2<-data.frame(x1)
+total_counts<-scale(x2) #by column
+total_counts<-t(scale(t(total_counts))) #by row
+
+bpo_info<-read.csv(file="Bpo_info.csv", header=T)
+
+with(bpo_info, table(Food, Pheromone))
+bpo_info$trt.grp<-with(bpo_info,paste(Pheromone,Food, sep="_"))
+
+
+#scale avg the same way
+avg_totals<-scale(avg) 
+avg_totals<-t(scale(t(avg_totals)))  
+
+    #heatmaps for all DEG
+distance = dist(t(total_counts), method = "manhattan")
+cluster = hclust(distance, method = "ward.D2")
+plot(cluster)
+
+heatmap.2(total_counts,
+          main="",
+          density.info="none",
+          trace="none",
+          dendrogram="column",
+          Colv = as.dendrogram(cluster),
+          labRow=""
+          )
+
+heatmap.2(total_counts,
+          main="Clustered Heat Map",
+          density.info="none",
+          trace="none",
+          dendrogram="column",
+          Colv = as.dendrogram(cluster),
+          labRow="",
+           )
+
+###
+
+distance = dist(avg_totals, method = "manhattan")
+cluster = hclust(distance, method = "ward.D")
+
+heatmap.2(avg_totals,
+          main="Correlation",
+          density.info="none",
+          trace="none",
+          dendrogram="column",
+           COlv = as.dendrogram(cluster),
+          labRow=""
+            )
+
+
+```
+
+```{r hierarchical clustering}
+#creates hierarchical clustering
+logReadCounts = log2(x2 + 0.5)
+dist = as.dist(1 - cor(logReadCounts))
+
+#alt dist on scaled counts
+dist= dist(total_counts,method="manhattan")
+
+
+cluster<-hclust(dist, method="ward.D2")
+plot(cluster)
+#to clean this up, use treatment level
+
+#using pcclust package to do bootstraps. how to 
+cluster.pvalue<-pvclust(total_counts, parallel = F, nboot=10000, method.hclust = "ward.D2", method.dist = "manhattan")
+plot(cluster.pvalue)
+pvrect(cluster.pvalue, alpha=0.95)
+
+
+
+#using 
+dist= dist(t(total_counts),method="manhattan")
+cluster<-hclust(dist, method="ward.D2")
+plot(cluster)
+rect.hclust(cluster, k=8)
+
+cboot_100<-clusterboot(t(total_counts), clustermethod = hclustCBI, method="ward.D2", k=8) 
+
+
+###kmeans
+library(grDevices)
+library(RColorBrewer)
+d <- dist( t(total_counts) )
+e<-(total_counts)
+km <- kmeans(t(total_counts), centers=6)
+hmcol <- colorRampPalette(brewer.pal(9, "GnBu"))(100)
+
+library(genefilter)
+rv <- rowVars(e)
+idx <- order(-rv)[1:40]
+ 
+
+
+library(gplots) ##Available from CRAN
+cols <- palette(brewer.pal(8, "Dark2"))
+head(cbind(colnames(e),cols))
+
+heatmap.2(e[idx,],
+          main="Correlation",
+          density.info="none",
+          trace="none",
+          dendrogram="column",
+          labRow=""
+            )
+
+
+```
+
+```{r no longer necessary}
+##just checking that they're the same exact shape
+##the genes are in different orders
+all(x$GeneID==x1$GeneID)
+
+
+#samples are in same orders
+all(colnames(x)==colnames(x1))
+
+##sort both data frames
+x1%>%arrange(desc(GeneID))->x1
+x%>%arrange(desc(GeneID))->x
+
+#now they're the same
+all(x$GeneID==x1$GeneID)
+
+##set geneID as row names and then get rid of it.
+ row.names(x)<-x$GeneID
+# row.names(x1)<-x1$GeneID
+ x<-x%>%select(-GeneID)
+# x1<-x1%>%select(-GeneID)
+# head(x1)[,1:3]
+ head(x)[,1:3]
+ #all(rownames(bp_info) == colnames(x1))
+  all(rownames(bp_info) == colnames(x))
+```
+
+```{r Pheromone only}
+
+
+
+BPOseq_Phero <- DESeqDataSetFromMatrix(countData = x,
+                              colData = bp_info,
+                              design = ~ Pheromone)
+BPOseq_Phero$Pheromone <- relevel(BPOseq_Phero$Pheromone, ref = "Control")
+
+
+BPOseq_Phero <- collapseReplicates(object = BPOseq_Phero,groupby = BPOseq_Phero$SampleID, renameCols = F)
+
+keep <- rowSums(counts(BPOseq_Phero)) >= 10
+BPOseq_Phero <- BPOseq_Phero[keep,]
+BPO_Phero_DEG<-DESeq(BPOseq_Phero)
+results_BPO_Phero <- results(BPO_Phero_DEG)
+
+summary(results_BPO_Phero)
+sum(results_BPO_Phero$padj < 0.05, na.rm=TRUE)
+
+
+
+```
+
+```{r Food Only}
+
+
+
+BPOseq_Food <- DESeqDataSetFromMatrix(countData = x,
+                              colData = bp_info,
+                              design = ~ Food)
+BPOseq_Food$Food <- relevel(BPOseq_Food$Food, ref = "Nectar")
+
+
+BPOseq_Food <- collapseReplicates(object = BPOseq_Food,groupby = BPOseq_Food$SampleID, renameCols = F)
+
+keep <- rowSums(counts(BPOseq_Food)) >= 10
+BPOseq_Food <- BPOseq_Food[keep,]
+BPOseq_Food_DEG<-DESeq(BPOseq_Food)
+results_BPOseq_Food <- results(BPOseq_Food_DEG)
+
+summary(results_BPOseq_Food)
+sum(results_BPOseq_Food$padj < 0.05, na.rm=TRUE)
+
+
+
+```
+
+
+```{r depracated beebase seach}
+
+
+##how many rows don't have beebase genes
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_beebase %like% "gene",]%>%nrow##6000 with "gene"
+
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% "gene",]%>%nrow #genes replaced with LOC
+
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% NA,]%>%nrow #I have some NA values
+
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_beebase %like% NA,]%>%nrow #I have some NA values
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% NA,]%>%nrow #I have some NA values
+
+
+
+#find the ones that didn't work
+failed<-gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% NA,]
+
+#find ones that did work
+success<-gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_parent %like% "rna"==F,]%>%select(-gff_beebase)
+
+success_library<-gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_parent %like% "rna"==F,]%>%select(gff_parent=gff_rna, gff_gene_beebase)
+
+
+#for ones that didnt work, find the true names
+corrected<-left_join(failed,success_library, by="gff_parent")
+
+gff_rna2beebase_HAv3.1<-rbind(success,corrected)
+
+
+##sanity check that problem is fixed
+##how many rows don't have beebase genes
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_beebase %like% "gene",]%>%nrow##6000 with "gene"
+
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% "gene",]%>%nrow #genes replaced with LOC
+
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_gene_beebase %like% NA,]%>%nrow #I have some NA values
+
+
+
+```
+
+
+```{r tximport}
+##browseVignettes("tximport")
+dir <- file.path("C:/Users/Rong/Desktop/results")#set file path
+list.files(dir)#sanity check that directories are present
+samples<-row.names(bp_info)#names of samples 
+
+#combine paths, folders of all the samples, and the abundances of all samples 
+files <- file.path(dir, samples, "abundance.tsv")#files tsv
+
+#files <- file.path(dir, samples, "abundance.h5") 
+
+names(files)<-samples#set sample names of the files
+all(file.exists(files))##sanity check that all files actually exist and paths referring to them are correct
+
+
+##combining all the tsvs
+# txi.kallisto.tsv <- tximport(files, type = "kallisto",txOut = FALSE, tx2gene=tx2gene,countsFromAbundance = "lengthScaledTPM")
+# #txout flips between transcript or gene lvel. need to supply conversion table for gene level, here called tx2gene
+##counts from abundance to generate TPM
+
+
+
+# ##files also as tsv
+
+##two options here according to tximport manual
+##option 1 ###
+#don't use counts from abundance, and then import txi using DESeqDataSetFromTximport function
+
+###option 2###
+#use tximport function with counts countsFromAbundance="lengthScaledTPM" or "scaledTPM"
+#then use gene level count matrix txi$counts directly. I called this txi.kallisto.tsv bellow. 
+
+
+#OPtion 2 throws errors because the counts become fractional, so proceed with option 1
+
+
+files <- file.path(dir, samples, "abundance.tsv")
+txi.kallisto.tsv <- tximport(files, type = "kallisto",txOut = FALSE, tx2gene=tx2gene,countsFromAbundance = "no")
+
+
+names(txi.kallisto.tsv)
+head(txi.kallisto.tsv$abundance)
+head(txi.kallisto.tsv$counts)#gene counts worked for samples?
+head(txi.kallisto.tsv$countsFromAbundance) #checking to make sure TPMs are used
+
+#Do these counts sum to 1million, as in TPM
+txi.kallisto.tsv$counts%>%colSums()
+txi.kallisto.tsv$abundance%>%colSums()
+
+
+all(samples== row.names(bp_info))
+colnames(txi.kallisto.tsv$counts)<-samples
+
+# x1<-as.data.frame(txi.kallisto.tsv$counts)
+# x1$GeneID=row.names(x1)
+# x1<-x1[,c(73,1:72)]
+write.csv(txi.kallisto.tsv$counts,file = "txi.kallisto.csv")#so this is using raw counts
+
+write.csv(txi.kallisto.tsv$abundance,file = "txi.kallisto.tpm.csv")#so this is using raw counts
+
+BPOseq1 <- DESeqDataSetFromTximport(txi.kallisto.tsv, bp_info, ~Pheromone+Food +Pheromone:Food)
+##uses counts and average transcript length to offset
+
+
+##length scaled TPM
+txi.TPM.tsv <- tximport(files, type = "kallisto",txOut = FALSE, tx2gene=tx2gene,countsFromAbundance = "lengthScaledTPM")
+
+BPOseq_tpm <- DESeqDataSetFromMatrix(round(txi.TPM.tsv$counts), bp_info, ~Pheromone+Food +Pheromone:Food)
+
+
+```
+
+```{r TPM}
+BPOseq_tpm <- collapseReplicates(object = BPOseq_tpm,groupby = BPOseq_tpm$SampleID, renameCols = F)
+
+
+
+BPOseq_tpm$Pheromone <- relevel(BPOseq_tpm$Pheromone, ref = "Control")
+BPOseq_tpm$Food <- relevel(BPOseq_tpm$Food, ref = "Nectar")
+
+keep <- rowSums(counts(BPOseq_tpm)) >= 10
+BPOseq_tpm <- BPOseq_tpm[keep,]
+BPO_DEG_TPM<-DESeq(BPOseq_tpm)
+
+resultsNames(BPO_DEG_TPM)
+
+results_tpm <- results(BPO_DEG_TPM)
+resOrdered_tpm <- results_tpm[order(results_tpm$padj),]
+summary(results_tpm)
+
+
+
+###Pheromone Main Effects###
+#BP vs EBO
+results(BPO_DEG_TPM, contrast =c("Pheromone","BP","EBO"))%>%summary()
+
+results(BPO_DEG_TPM, contrast =c("Pheromone","BP","EBO"))->BPvEBO_results
+
+
+BPvEBO_results <- BPvEBO_results[order(BPvEBO_results$padj<0.1),]
+
+BPvEBO_idx<-BPvEBO_results%>%get_sig_genes()
+
+
+##BP vs Control
+results(BPO_DEG_TPM, contrast =c("Pheromone","BP","Control"))%>%summary()
+
+results(BPO_DEG_TPM, contrast =c("Pheromone","BP","Control"))->BP_results
+
+BP_results <- BP_results[order(BP_results$padj<0.1),]
+
+BP_results%>%get_sig_genes()->BPvCTRL_idx
+
+
+
+
+#EBO vs Control
+results(BPO_DEG_TPM, contrast =c("Pheromone","EBO","Control"))%>%summary()
+
+results(BPO_DEG_TPM, contrast =c("Pheromone","EBO","Control"))->EBO_results
+
+EBO_results <- EBO_results[order(EBO_results$padj<0.1),]
+
+EBOvsCTRL_idx<-EBO_results%>%get_sig_genes()
+
+
+##Food Maian effect
+results(BPO_DEG_TPM, contrast =c("Food","Pollen","Nectar"))%>%summary()
+
+results(BPO_DEG_TPM, contrast =c("Food","Pollen","Nectar"))->Nect_Pollen_results
+
+Nect_Pollen_results <- Nect_Pollen_results[order(Nect_Pollen_results$padj<0.1),]
+
+
+
+Nect_Pollen_results%>%get_sig_genes()->NvP_idx
+
+##interaction effects
+
+#Pheromone BP comparing between pollen and nectar foragers
+results(BPO_DEG_TPM, name = "PheromoneBP.FoodPollen")%>%summary()
+results(BPO_DEG_TPM, name = "PheromoneBP.FoodPollen")->PheromoneBP_FoodPollen
+
+PheromoneBP_FoodPollen <- PheromoneBP_FoodPollen[order(PheromoneBP_FoodPollen$padj<0.1),]
+
+PheromoneBP_FoodPollen%>%get_sig_genes() ->BPxPollen_idx
+
+##Pheromone EBO comparing between pollen and nectar foragers
+results(BPO_DEG_TPM, name = "PheromoneEBO.FoodPollen")%>%summary()
+
+results(BPO_DEG_TPM, name = "PheromoneEBO.FoodPollen")->PheromoneEBO_FoodPollen
+
+
+PheromoneEBO_FoodPollen <- PheromoneEBO_FoodPollen[order(PheromoneEBO_FoodPollen$padj<0.1),]
+
+PheromoneEBO_FoodPollen%>%get_sig_genes()->EBOxPollen_idx
+
+##BP vs EBO comparing between pollen and nectar foragers
+results(BPO_DEG_TPM, contrast = list( "PheromoneEBO.FoodPollen","PheromoneBP.FoodPollen" ))%>%summary()
+
+results(BPO_DEG_TPM, contrast = list( "PheromoneEBO.FoodPollen","PheromoneBP.FoodPollen" ))->PheromoneEBOvBP_FoodPollen
+
+PheromoneEBOvBP_FoodPollen <- PheromoneEBOvBP_FoodPollen[order(PheromoneEBOvBP_FoodPollen$padj<0.1),]
+
+PheromoneEBOvBP_FoodPollen%>%get_sig_genes()->EBOvsBPxPollen_idx
+
+
+```
+```{r lfc}
+ resultsNames(BPO_DEG1)
+resLFC <- lfcShrink(BPO_DEG1, coef="Food_Pollen_vs_Nectar", type="apeglm")
+resLFC%>%summary()
+
+par(mar=c(1,1,1,1))
+plotMA(resLFC, ylim=c(-2,2))
+plotMA(BPO_DEG1, ylim=c(-2,2))
+
+
+
+```
+
+
+```{r topGO}
+#Nect_Pollen_results,
+#EBO_results,
+#BP_results
+
+sampleGOdata <- new("topGOdata",description = "Simple session", ontology = "MF",allGenes = Nect_Pollen_results, geneSel = topDiffGenes,nodeSize = 10,annot = annFUN.db, affyLib = affyLib)
+
+annFUN.org(whichOnto, feasibleGenes = NULL, mapping, ID = "entrez")
+
+```
+
+```{r read in HAv gff deprecated}
+#library(data.table)
+#library(tidyverse)
+
+
+gff<-read.delim(file="GCF_003254395.2_Amel_HAv3.1_genomic.gff", header=F,comment.char="#")
+
+gff_genelist<-gff[gff$V9 %like% "ID=gene",]
+gff_gene<-sub("^ID=([^:]*?);.*", "\\1", gff_genelist$V9)
+gff_gene_beebase<- sub(".*=BEEBASE:([^:]*?),GeneID.*", "\\1", gff_genelist$V9)
+gff_gene_beebase<- sub(".*;Name=([^:]*?);.*", "\\1", gff_gene_beebase)
+
+gene2beebase<-cbind(gff_gene,gff_gene_beebase)%>%as.data.frame
+
+colnames(gene2beebase)[1]<-"gff_parent"
+
+gff_rnalist<- gff[gff$V9 %like% "ID=rna",]
+gff_rna<-sub("^ID=([^:]*?);.*", "\\1", gff_rnalist$V9)
+
+gff_parent<-sub(".*Parent=([^:]*?);.*", "\\1", gff_rnalist$V9)
+
+gff_beebase<- sub(".*BEEBASE:([^:]*?);Name=.*", "\\1", gff_rnalist$V9)
+gff_beebase<-sub(".*gene=([^:]*?);.*", "\\1", gff_beebase)##some are missing BEEbase, so just use gene
+
+##you can pull the GENEID and use with entrez as well
+gff_beebase<- sub(".*GeneID([^:]*?),Genbank.*", "\\1", gff_rnalist$V9)
+#create data frame
+gff_rna2beebase_HAv3.1<-cbind(gff_rna,gff_parent,gff_beebase)%>%as.data.frame()
+
+##how many rows don't have beebase genes
+gff_rna2beebase_HAv3.1[gff_rna2beebase_HAv3.1$gff_beebase %like% NA,]
+
+
+
+##create final Tx2Gene file
+tx2gene_HAv3.1<-gff_rna2beebase_HAv3.1%>%select(target.id=gff_rna,GeneID=gff_beebase,-gff_parent)
+
+#how many genes?
+tx2gene_HAv3.1$GeneID%>%unique()%>%length()
+
+
+```
+
+```{r regulation sig genes DAVID}
+
+
+
+##BP vs Control
+
+results(BPO_DEG1, contrast =c("Pheromone","BP","Control"))->BP_results
+
+BP_up <- BP_results%>%subset(padj<0.5 & log2FoldChange>0)%>%get_sig_genes()
+
+BP_down <- BP_results%>%subset(padj<0.5 & log2FoldChange<0)%>%get_sig_genes()
+
+
+#EBO vs Control
+
+results(BPO_DEG1, contrast =c("Pheromone","EBO","Control"))->EBO_results
+
+EBO_down <- EBO_results%>%subset(padj<0.5 & log2FoldChange<0)%>%get_sig_genes()
+
+EBO_up <- EBO_results%>%subset(padj<0.5 & log2FoldChange>0)%>%get_sig_genes()
+
+##Food Maian effect
+
+results(BPO_DEG1, contrast =c("Food","Pollen","Nectar"))->Nect_Pollen_results
+
+Food_up<- Nect_Pollen_results%>%subset(padj<0.5 & log2FoldChange>0)%>%get_sig_genes()
+
+Food_down<- Nect_Pollen_results%>%subset(padj<0.5 & log2FoldChange<0)%>%get_sig_genes()
+
+Nect_Pollen_results%>%get_sig_genes()->NvP_idx
+
+length(Food_up)<-length(Food_down)<- length(BP_up)<-length(BP_down)<-length(EBO_up)<-length(EBO_down)<-length(background)
+
+main_eff_DEG_reg<-cbind(Food_down,Food_up,EBO_down,EBO_up,BP_up,BP_down,background)
+
+
+
+```
+
+```{r generating tx2gene from gff3}
+
+#write.csv(gff2,"gff3.csv")
+
+
+gff_genelist<-gff2[gff2$type=="gene",]
+
+#take only the mRNAs
+gff_rnalist<-gff2[gff2$type=="mRNA",]
+
+trial<-gff_rnalist$Dbxref
+
+
+beebaseIDs<-c()
+for(i in 1:length(trial)){
+  dummy<-trial[[i]][3]
+beebaseIDs<-c(beebaseIDs,dummy)  
+}
+
+
+
+dbxref<-gff_rnalist$Dbxref%>%as.data.frame()%>%select(-group_name)
+
+
+
+dbxref_GID<-dbxref[dbxref$value %like% "GeneID",]
+dbxref_BB<-dbxref[dbxref$value %like% "BEEBASE",]
+GeneIDs<-sub(dbxref_GID$value,pattern = "GeneID:",replacement = "")
+beebaseIDs<-sub(beebaseIDs,pattern = "BEEBASE:",replacement = "")
+gff_rnalist$GeneID<-GeneIDs
+gff_rnalist$Beebase<-beebaseIDs
+gff_rnalist[,c(11,17,18)]%>%head(20)
+tx2gene_HAv3.1<-as.data.frame(gff_rnalist)%>%select(target.id=ID,GeneID=GeneID)
+GeneID_Beebase<-as.data.frame(gff_rnalist)%>%select(target.id=ID,GeneID=GeneID,BeeBase=Beebase,accession=Name)
+
+write.csv(GeneID_Beebase,file = "mRNA_Entrez_Beebase_conversion.csv")
+
+```
