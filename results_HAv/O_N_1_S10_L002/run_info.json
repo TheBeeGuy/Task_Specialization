@@ -1,0 +1,13 @@
+{
+	"n_targets": 28409,
+	"n_bootstraps": 0,
+	"n_processed": 13448664,
+	"n_pseudoaligned": 9477809,
+	"n_unique": 3461686,
+	"p_pseudoaligned": 70.5,
+	"p_unique": 25.7,
+	"kallisto_version": "0.44.0",
+	"index_version": 10,
+	"start_time": "Thu Nov 08 14:47:09 2018",
+	"call": "C:\Users\Rong\Desktop\kallisto\kallisto.exe quant -i E:/BPOsequences/Amel_index_Hav3.1.idx --single -l 36 -s 0.1 -o O_N_1_S10_L002 O_N_1_S10_L002_R1_001.trim.fq"
+}

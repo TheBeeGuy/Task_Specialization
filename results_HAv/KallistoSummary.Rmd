@@ -1,0 +1,47 @@
+```{r} 
+library(tidyverse)
+library(data.table)
+setwd("C:/Users/Rong/Desktop/results_HAv")
+
+x<-read.table("combined_json.txt")
+files<-read.table("files.txt")
+
+reads<-x[x$V1 %like% "n_processed",]
+reads<-gsub("n_processed:\\ (\\d*),", "\\1",x = reads)
+
+uniques<-x[x$V1 %like% "n_unique",]
+uniques<-gsub("n_unique:\\ (\\d*),", "\\1",x = uniques)
+
+aligned<-x[x$V1 %like% "n_pseudoaligned",]
+aligned<-gsub("n_pseudoaligned:\\ (\\d*),", "\\1",x = aligned)
+
+
+percent_alignment<-x[x$V1 %like% "p_pseudoaligned",]
+percent_alignment<-gsub("p_pseudoaligned:\\ (\\d*\\.\\d*),", "\\1",x = percent_alignment)
+
+
+percent_unique<-x[x$V1 %like% "p_unique",]
+percent_unique<-gsub("p_unique:\\ (\\d*\\.\\d*),", "\\1",x = percent_unique)
+
+
+files<-files[files$V1 %like% "/",]
+files<-gsub("/", "", files)
+
+samples<-gsub("_S\\d*_L\\d*$", "", files)
+
+lane<-rep(c(1:4),18)
+
+alignment<-cbind(files,lane, samples, reads,aligned, uniques,  percent_alignment, percent_unique)
+                 
+write.csv(alignment, "Kallisto_summary.csv")
+
+alignment<-read.csv("Kallisto_summary.csv", header = T)
+orginial_reads<-read.csv("sequencing_info_original.csv",header = T,col.names = c("files","original","md5sum"))%>%select(-md5sum)
+alignment<-left_join(alignment,orginial_reads,by="files")
+
+summaries<-alignment%>%group_by(samples)%>%summarise(avg_total_reads=mean(original),avg_trimmed=mean(reads), avg_pseudoaligned=mean(aligned),avg_unique=mean(uniques), percent_pseudo_align=mean(percent_alignment), percent_unique=mean(percent_unique))%>%mutate(Pheromone=c(rep("BP",6),rep("EBO",6),rep("Control",6)),Food=c(rep("Pollen",3),rep("Nectar",3),rep("Nectar",3),rep("Pollen",3),rep("Pollen",3),rep("Nectar",3)))
+
+summary(summaries)
+
+write.csv(summaries, "Kallisto_avg_summary.csv")
+```
