@@ -50,8 +50,8 @@ library(tidyverse)
 ###LOAD DATA
 ```{r read in data}
 #laptop
-setwd("C:/Users/Rong/Box Sync/Projects/BPO_rnaseq/BPO_rnaseq")
-source("get_significant_genes_function.R")
+
+source("code/get_significant_genes_function.R")
 #Desktop
 #setwd("D:/Dropbox/Projects/BPO_rnaseq")
 #x<-read.table(file = "gene_counts_2Oct18.txt", header=T)##addin row.names=1
@@ -63,7 +63,7 @@ source("get_significant_genes_function.R")
 
 
 #read in sample info
-bp_info<-read.csv(file="Bpo_info.csv", row.names=1, header=T)
+bp_info<-read.csv(file="data/Bpo_info.csv", row.names=1, header=T)
 
 
 bp_info$PheroXFood<- factor(paste0(bp_info$Pheromone, bp_info$Food))
