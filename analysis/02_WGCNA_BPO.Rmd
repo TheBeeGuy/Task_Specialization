@@ -1,9 +1,11 @@
 ---
 title: "BPO WGCNA"
-author: "Rong"
+author: "Rong Ma"
 date: "February 16, 2017"
 output: html_document
 ---
+# Packages and Data
+
 ```{r load libraries}
 # Load WGCNA and flashClust libraries every time you open R
 #source("https://bioconductor.org/biocLite.R")
@@ -25,11 +27,8 @@ library(tidyverse)
 
 
 ```{r load in data}
-#Set your current working directory (where all your files are)
-#setwd("~/Desktop/WGCNA/") # Change the text within quotes as necessary. I have downloaded and unzipped the WGCNA folder on my Desktop
-
 source("code/outersect.R")
-#setwd("D:/Dropbox/Projects/BPO_rnaseq")
+
 
 # Uploading data into R and formatting it for WGCNA --------------
 
@@ -69,6 +68,7 @@ table(rownames(bpoTraits) == rownames(bpo.Expr)) #should return TRUE if datasets
 
 ```
 
+#Generating Gene Networks
 ```{r cluster by expression}
 load("data/SamplesAndTraits_bpo.RData")
 
@@ -154,14 +154,15 @@ text(
 
 #from this plot, we would choose a power of 10 becuase it's the lowest power for which the scale free topology index reaches 0.90
 
-enableWGCNAThreads()
-softPower = 10
-adjacency = adjacency(bpo.Expr, power = softPower, type = "signed",corFnc="bicor") #specify network type
 ```
 
 ```{r construct networks}
 
 # Construct Networks- USE A SUPERCOMPUTER IRL -----------------------------
+enableWGCNAThreads()
+softPower = 10
+adjacency = adjacency(bpo.Expr, power = softPower, type = "signed",corFnc="bicor") #specify network type
+
 
 #translate the adjacency into topological overlap matrix and calculate the corresponding dissimilarity:
 TOM = TOMsimilarity(adjacency, TOMType = "signed") # specify network type
@@ -173,7 +174,7 @@ dissTOM = 1 - TOM
 
 
 ```{r generate modules}
-# Generate Modules --------------------------------------------------------
+
 
 # Generate a clustered gene tree
 geneTree = flashClust(as.dist(dissTOM), method = "average")
@@ -208,11 +209,13 @@ Mod_numbers_colors<-cbind(dynamicColors, dynamicMods)%>%unique()
 
 save(dynamicMods,Mod_numbers_colors, MEList, MEs, MEDiss, METree,geneTree,adjacency, file = "data/Network_allSamples_signed_RLDfiltered.RData")
 
+##this produces a large file, so make sure this is ignored in gitignore
 save(TOM,file="data/Tom_BPO.RData")
 ```
 
 
 ```{r ME tree and dendrogram and merging}
+
 load("Network_allSamples_signed_RLDfiltered.RData")
 ##If you're starting from here, reload dynamic colors and bpoExpr
 
@@ -263,7 +266,11 @@ save(MEs, moduleLabels, moduleColors, geneTree, file = "data/Network_allSamples_
 
 ```
 
+
+# Module Trait Relationships using GLM
 ```{r glm}
+
+
 ##number genes in each module
 #load("Network_allSamples_signed_RLDfiltered.RData")
 load("data/Network_allSamples_signed_nomerge_RLDfiltered.RData")
@@ -313,6 +320,7 @@ save(Cor_Sig_Modules_GLM,pval_Sig_Modules_GLM, file = "data/GLM_pval_Cor.RData")
 
 ```
 
+#Signficant and Hub Genes
 
 ```{r extracting significant genes}
 load("data/GLM_pval_Cor.RData")
@@ -369,6 +377,7 @@ moduleList<-gsub("ME","" ,Significant_ME)
 
 
 ```{r module gene lists for DAVID }
+
 load("data/Network_allSamples_signed_nomerge_RLDfiltered.RData")
 #Significant_ME
 
@@ -465,6 +474,8 @@ hub_genes_beebase<-hub_genes_beebase[!duplicated(hub_genes_beebase$hub_gene),]
 write.csv(hub_genes_beebase, file="output/top5_hub_genes_beebase.csv")
 ```
 
+# Overlaps between DEGs and Modules
+
 ```{r overlaps b/w DEG and module genes}
 load("data/module_sig_genes.RData")
 load("data/deg_summary_all_lists.RData")
@@ -517,7 +528,7 @@ colnames(kegg_pathways_WGCNA)<-colnames(module_significant_genes)
 write.csv(kegg_pathways_WGCNA,file = "output/kegg_pathways_WGCNA.csv")
 ```
 
-
+# Trait Correlation Figure
 ```{r glm trait cor}
 library(viridis)
 library(pheatmap)
@@ -594,6 +605,8 @@ pheatmap(
 
     
 ```
+
+#Visualing networks
 
 ```{r visualize network}
 library(WGCNA)
